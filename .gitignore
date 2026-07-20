@@ -1,0 +1,16 @@
+# Python
+__pycache__/
+*.pyc
+
+# VS Code
+.vscode/
+
+# Sanal ortam
+venv/
+.env/
+
+# Geçici dosyalar
+*.log
+
+# Kamera kalibrasyon çıktıları (istersen bunları sonradan ekleyebilirsin)
+# calibration/*.npy
