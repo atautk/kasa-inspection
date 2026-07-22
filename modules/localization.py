@@ -40,17 +40,19 @@ class LocalizationEngine:
     def get_frame_corners(self, markers):
 
         required = [0, 1, 2, 3]
-
         for marker_id in required:
             if marker_id not in markers:
                 return None
-
+        
         return np.float32([
-            markers[0]["center"],
-            markers[1]["center"],
-            markers[2]["center"],
-            markers[3]["center"]
+            markers[0]["corners"][0],
+            markers[1]["corners"][1],
+            markers[2]["corners"][3],
+            markers[3]["corners"][2]
         ])
+
+
+        
 
     def get_confidence(self, visible):
 

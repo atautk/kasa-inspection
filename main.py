@@ -1,92 +1,95 @@
 import cv2
+
 from modules.aruco_detector import ArucoDetector
-from modules.reference_frame import ReferenceFrame
 from modules.localization import LocalizationEngine
+from modules.reference_frame import ReferenceFrame
 
 
-# -----------------------------
-# Kamera Ayarları
-# -----------------------------
-CAMERA_INDEX = 0      # Eğer çalışmazsa 1 veya 2 dene.
+# ---------------------------------
+# Kamera
+# ---------------------------------
+
+CAMERA_INDEX = 0
 
 cap = cv2.VideoCapture(CAMERA_INDEX, cv2.CAP_DSHOW)
 
 if not cap.isOpened():
-    print("❌ Kamera açılamadı!")
+    print("Kamera açılamadı.")
     exit()
 
-# İsteğe bağlı çözünürlük
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
+
+# ---------------------------------
+# Modüller
+# ---------------------------------
+
 aruco = ArucoDetector()
-reference_frame = ReferenceFrame()
+
 localizer = LocalizationEngine()
 
-print("=" * 40)
-print(" KASA INSPECTION ")
-print("=" * 40)
-print("Q veya ESC ile çıkabilirsiniz.")
-print()
+reference_frame = ReferenceFrame(
+    width=1200,
+    height=800
+)
 
-# -----------------------------
+
+print("KASA INSPECTION")
+print("Q : Çıkış")
+
+
+# ---------------------------------
 # Ana Döngü
-# -----------------------------
+# ---------------------------------
+
 while True:
 
     ret, frame = cap.read()
 
     if not ret:
-        print("❌ Kameradan görüntü alınamadı.")
         break
 
-    corners, ids = aruco.detect(frame)
+    # -----------------------------
+    # ArUco
+    # -----------------------------
 
-    if ids is not None:
+    markers = aruco.detect(frame)
 
-        cv2.aruco.drawDetectedMarkers(
+    # Markerları çiz
+
+    for marker in markers.values():
+
+        cv2.polylines(
             frame,
-            corners,
-            ids
+            [marker["corners"].astype(int)],
+            True,
+            (0, 255, 0),
+            2
         )
 
-        id_text = "ID: " + " ".join(map(str, ids.flatten()))
-        
-        markers = {}
-        for marker_corner, marker_id in zip(corners, ids.flatten()):
-            markers[int(maker_id)]={
-                "corners":marker_corner,
-                "center":marker_corner.reshape(4, 2).mean(axis=0)
-            }
-        
-        localization = localizer.update(markers)
+    # -----------------------------
+    # Localization
+    # -----------------------------
 
-        print(
-    f"Mode: {localization['mode']} | "
-    f"Visible: {localization['visible']} | "
-    f"Confidence: {localization['confidence']}%"
-)
-        
-        print(localization["mode"])
-        
-        reference=reference_frame.generate(frame, localization["frame_corners"])
+    localization = localizer.update(markers)
 
-        if reference is not None:
-            cv2.imshow("Reference Frame", reference)
-        
-        for marker_id in sorted(markers.keys()):
+    # -----------------------------
+    # Reference Frame
+    # -----------------------------
 
-            center = markers[marker_id]["center"]
+    reference = reference_frame.generate(
+        frame,
+        localization["frame_corners"]
+    )
 
-            print(f"ID {marker_id} -> {center}")
-    else:
+    # -----------------------------
+    # Bilgiler
+    # -----------------------------
 
-        id_text = "ID: Yok"
-
-    # Bilgi Yazıları
     cv2.putText(
         frame,
-        id_text,
+        f"MODE : {localization['mode']}",
         (20, 35),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.8,
@@ -96,23 +99,34 @@ while True:
 
     cv2.putText(
         frame,
-        "Q : Cikis",
+        f"VISIBLE : {localization['visible']}",
         (20, 70),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.8,
-        (255, 0, 0),
+        (255, 255, 0),
+        2
+    )
+
+    cv2.putText(
+        frame,
+        f"CONFIDENCE : {localization['confidence']}%",
+        (20, 105),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0, 200, 255),
         2
     )
 
     cv2.imshow("KASA INSPECTION", frame)
+
+    if reference is not None:
+        cv2.imshow("REFERENCE FRAME", reference)
 
     key = cv2.waitKey(1) & 0xFF
 
     if key == ord("q") or key == 27:
         break
 
-# -----------------------------
-# Temizlik
-# -----------------------------
+
 cap.release()
-cv2.destroyAllWindows() 
+cv2.destroyAllWindows()
