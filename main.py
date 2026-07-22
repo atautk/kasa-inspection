@@ -1,6 +1,6 @@
 import cv2
 from modules.aruco_detector import ArucoDetector
-from modules.perspective import PerspectiveTransformer
+from modules.reference_frame import ReferenceFrame
 from modules.localization import LocalizationEngine
 
 
@@ -20,7 +20,7 @@ cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1280)
 cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 
 aruco = ArucoDetector()
-transformer = PerspectiveTransformer()
+reference_frame = ReferenceFrame()
 localizer = LocalizationEngine()
 
 print("=" * 40)
@@ -52,15 +52,27 @@ while True:
 
         id_text = "ID: " + " ".join(map(str, ids.flatten()))
         
-        markers = transformer.sort_markers(corners, ids)
+        markers = {}
+        for marker_corner, marker_id in zip(corners, ids.flatten()):
+            markers[int(maker_id)]={
+                "corners":marker_corner,
+                "center":marker_corner.reshape(4, 2).mean(axis=0)
+            }
         
         localization = localizer.update(markers)
+
+        print(
+    f"Mode: {localization['mode']} | "
+    f"Visible: {localization['visible']} | "
+    f"Confidence: {localization['confidence']}%"
+)
+        
         print(localization["mode"])
         
-        warped = transformer.warp(frame, localization["points"])
+        reference=reference_frame.generate(frame, localization["frame_corners"])
 
-        if warped is not None:
-            cv2.imshow("Perspective", warped)
+        if reference is not None:
+            cv2.imshow("Reference Frame", reference)
         
         for marker_id in sorted(markers.keys()):
 

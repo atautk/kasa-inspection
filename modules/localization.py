@@ -5,11 +5,9 @@ class LocalizationEngine:
 
     def __init__(self):
 
-        self.last_markers = None
+        self.last_frame_corners = None
 
     def update(self, markers):
-
-        self.last_markers = markers
 
         visible = len(markers)
 
@@ -25,34 +23,44 @@ class LocalizationEngine:
         else:
             mode = "FAIL"
 
+        frame_corners = self.get_frame_corners(markers)
+
+        if frame_corners is not None:
+            self.last_frame_corners = frame_corners
+        else:
+            frame_corners = self.last_frame_corners
+
         return {
             "mode": mode,
             "visible": visible,
-            "markers": markers,
-            "points": self.get_points(markers),
-            "confidence": self.get_confidence(visible)
+            "confidence": self.get_confidence(visible),
+            "frame_corners": frame_corners
         }
-    def get_points(self, markers):
 
-        points = []
+    def get_frame_corners(self, markers):
 
-        for marker_id in [0, 1, 2, 3]:
+        required = [0, 1, 2, 3]
 
-            if marker_id in markers:
-                points.append(markers[marker_id]["center"])
-            else:
-                points.append(None)
+        for marker_id in required:
+            if marker_id not in markers:
+                return None
 
-        return points
+        return np.float32([
+            markers[0]["center"],
+            markers[1]["center"],
+            markers[2]["center"],
+            markers[3]["center"]
+        ])
+
     def get_confidence(self, visible):
 
         if visible == 4:
             return 100
 
-        if visible == 3:
+        elif visible == 3:
             return 90
 
-        if visible == 2:
+        elif visible == 2:
             return 70
 
         return 0
