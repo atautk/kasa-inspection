@@ -5,10 +5,10 @@ from modules.localization import LocalizationEngine
 from modules.reference_frame import ReferenceFrame
 from modules.roi_manager import ROIManager
 from modules.inspection_engine import InspectionEngine
+from modules.recipe_manager import RecipeManager
+
 
 REFERENCE_FILE = "recipes/kasa_001/reference.png"
-
-
 
 # ---------------------------------
 # Kamera
@@ -45,6 +45,10 @@ roi_manager = ROIManager()
 
 ROI_FILE = "recipes/kasa_001/roi.json"
 roi_manager.load(ROI_FILE)
+
+recipe = RecipeManager()
+
+recipe.load("recipes/kasa_001/recipes.json")
 
 
 
@@ -152,6 +156,13 @@ while True:
         if crop.size != 0:
             
             result = inspection.analyze(crop)
+
+            print(
+                roi_manager.selected_roi["name"],
+                recipe.expected(
+                    roi_manager.selected_roi["name"]
+                )
+            )
             
             cv2.putText(
                 crop,

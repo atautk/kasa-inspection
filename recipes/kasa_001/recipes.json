@@ -1,0 +1,14 @@
+{
+    "recipe_name": "Clio_01",
+
+    "regions": {
+
+        "G01": "FULL",
+        "G02": "EMPTY",
+        "G03": "FULL",
+        "G04": "EMPTY",
+        "G05": "FULL",
+        "G06": "FULL"
+
+    }
+}
