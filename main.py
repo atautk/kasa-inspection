@@ -6,6 +6,9 @@ from modules.reference_frame import ReferenceFrame
 from modules.roi_manager import ROIManager
 from modules.inspection_engine import InspectionEngine
 
+REFERENCE_FILE = "recipes/kasa_001/reference.png"
+
+
 
 # ---------------------------------
 # Kamera
@@ -30,6 +33,8 @@ cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
 aruco = ArucoDetector()
 
 localizer = LocalizationEngine()
+
+inspection = InspectionEngine()
 
 reference_frame = ReferenceFrame(
     width=1200,
@@ -136,8 +141,49 @@ while True:
     cv2.imshow("KASA INSPECTION", frame)
 
     if reference is not None:
-        reference = roi_manager.draw(reference)
-        cv2.imshow("REFERENCE FRAME", reference)
+        reference_display = roi_manager.draw(reference)
+        cv2.imshow("REFERENCE FRAME", reference_display)
+    
+    if (roi_manager.selected_roi is not None):
+        crop = inspection.crop_polygon(
+            reference,
+            roi_manager.selected_roi["points"]
+        )
+        if crop.size != 0:
+            
+            result = inspection.analyze(crop)
+            
+            cv2.putText(
+                crop,
+                f"Mean: {result['mean']}",
+                (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
+            cv2.putText(
+                crop,
+                f"Std: {result['std']}",
+                (10, 50),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
+            cv2.putText(
+                crop,
+                f"Edges: {result['edge_count']}",
+                (10, 75),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                (0, 255, 0),
+                2
+            )
+            cv2.imshow(
+                roi_manager.selected_roi["name"],
+                crop
+            )
 
     key = cv2.waitKey(1) & 0xFF
     
@@ -149,7 +195,62 @@ while True:
 
     if key == ord("q") or key == 27:
         break
+    
+    if key == ord("r"):
+        if reference is not None:
+            inspection.save_reference(
+                reference,
+                REFERENCE_FILE
+            )
+            reference_image = inspection.load_reference(
+                REFERENCE_FILE  
+            )
 
+
+cv2.putText(
+    crop,
+    f"Mean : {result['mean']}",
+    (10,25),
+    cv2.FONT_HERSHEY_SIMPLEX,
+    0.55,
+    (0,255,0),
+    2
+)
+
+cv2.putText(
+    crop,
+    f"Std : {result['std']}",
+    (10,50),
+    cv2.FONT_HERSHEY_SIMPLEX,
+    0.55,
+    (0,255,0),
+    2
+)
+
+cv2.putText(
+    crop,
+    f"Edges : {result['edge_count']}",
+    (10,75),
+    cv2.FONT_HERSHEY_SIMPLEX,
+    0.55,
+    (0,255,0),
+    2
+)
+
+cv2.putText(
+    crop,
+    f"White : %{result['white_ratio']}",
+    (10,100),
+    cv2.FONT_HERSHEY_SIMPLEX,
+    0.55,
+    (0,255,0),
+    2
+)
+
+print(
+    roi_manager.selected_roi["name"],
+    result
+)
 
 cap.release()
 cv2.destroyAllWindows()
