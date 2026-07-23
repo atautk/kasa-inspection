@@ -3,6 +3,8 @@ import cv2
 from modules.aruco_detector import ArucoDetector
 from modules.localization import LocalizationEngine
 from modules.reference_frame import ReferenceFrame
+from modules.roi_manager import ROIManager
+from modules.inspection_engine import InspectionEngine
 
 
 # ---------------------------------
@@ -34,9 +36,23 @@ reference_frame = ReferenceFrame(
     height=800
 )
 
+roi_manager = ROIManager()
+
+ROI_FILE = "recipes/kasa_001/roi.json"
+roi_manager.load(ROI_FILE)
+
+
 
 print("KASA INSPECTION")
 print("Q : Çıkış")
+
+
+cv2.namedWindow("REFERENCE FRAME")
+
+cv2.setMouseCallback(
+    "REFERENCE FRAME",
+    roi_manager.mouse_callback
+)
 
 
 # ---------------------------------
@@ -120,9 +136,16 @@ while True:
     cv2.imshow("KASA INSPECTION", frame)
 
     if reference is not None:
+        reference = roi_manager.draw(reference)
         cv2.imshow("REFERENCE FRAME", reference)
 
     key = cv2.waitKey(1) & 0xFF
+    
+    roi_manager.key_handler(key)
+
+    if key == ord("s"):
+        roi_manager.save(ROI_FILE)
+    
 
     if key == ord("q") or key == 27:
         break
