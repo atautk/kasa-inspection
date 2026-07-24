@@ -1,13 +1,13 @@
 import cv2
 import time
-from modules.aruco_detector import ArucoDetector
-from modules.localization import LocalizationEngine
-from modules.reference_frame import ReferenceFrame
-from modules.roi_manager import ROIManager
-from modules.inspection_engine import InspectionEngine
-from modules.recipe_manager import RecipeManager
-from modules.decision_engine import DecisionEngine
-from modules.dashboard import Dashboard
+from modules.core.aruco_detector import ArucoDetector
+from modules.core.localization import LocalizationEngine
+from modules.core.reference_frame import ReferenceFrame
+from modules.ui.roi_manager import ROIManager
+from modules.core.inspection_engine import InspectionEngine
+from modules.core.recipe_manager import RecipeManager
+from modules.core.decision_engine import DecisionEngine
+from modules.ui.dashboard import Dashboard
 
 
 # -------------------------------------------------
@@ -70,7 +70,25 @@ inspection_time = 0
 # Pencere
 # -------------------------------------------------
 
-cv2.namedWindow("REFERENCE FRAME")
+cv2.namedWindow(
+    "REFERENCE FRAME",
+    cv2.WINDOW_NORMAL
+)
+cv2.resizeWindow(
+    "REFERENCE FRAME",
+    1200,
+    800
+)
+cv2.namedWindow(
+    "Dashboard",
+    cv2.WINDOW_NORMAL
+)
+
+cv2.resizeWindow(
+    "Dashboard",
+    1600,
+    900
+)
 
 cv2.setMouseCallback(
     "REFERENCE FRAME",
@@ -303,6 +321,7 @@ while True:
 
             logs
         )
+        
 
         cv2.imshow(
             "Dashboard",
@@ -356,6 +375,12 @@ while True:
     # -------------------------------------------------
 
     key = cv2.waitKey(1) & 0xFF
+    
+    if cv2.getWindowProperty(
+        "Dashboard",
+        cv2.WND_PROP_VISIBLE
+    ) < 1:
+        break
 
     roi_manager.key_handler(key)
 
