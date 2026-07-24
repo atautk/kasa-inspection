@@ -9,17 +9,17 @@ from modules.recipe_manager import RecipeManager
 from modules.decision_engine import DecisionEngine
 
 
-# ---------------------------------
+# -------------------------------------------------
 # Dosyalar
-# ---------------------------------
+# -------------------------------------------------
 
 ROI_FILE = "recipes/kasa_001/roi.json"
 REFERENCE_FILE = "recipes/kasa_001/reference.png"
 RECIPE_FILE = "recipes/kasa_001/recipes.json"
 
-# ---------------------------------
+# -------------------------------------------------
 # Kamera
-# ---------------------------------
+# -------------------------------------------------
 
 cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
 
@@ -30,9 +30,9 @@ if not cap.isOpened():
     print("Kamera açılamadı.")
     exit()
 
-# ---------------------------------
+# -------------------------------------------------
 # Modüller
-# ---------------------------------
+# -------------------------------------------------
 
 aruco = ArucoDetector()
 
@@ -43,10 +43,10 @@ reference_frame = ReferenceFrame(
     height=800
 )
 
+inspection = InspectionEngine()
+
 roi_manager = ROIManager()
 roi_manager.load(ROI_FILE)
-
-inspection = InspectionEngine()
 
 recipe = RecipeManager()
 recipe.load(RECIPE_FILE)
@@ -57,9 +57,9 @@ reference_image = inspection.load_reference(
     REFERENCE_FILE
 )
 
-# ---------------------------------
-# Pencereler
-# ---------------------------------
+# -------------------------------------------------
+# Pencere
+# -------------------------------------------------
 
 cv2.namedWindow("REFERENCE FRAME")
 
@@ -68,14 +68,17 @@ cv2.setMouseCallback(
     roi_manager.mouse_callback
 )
 
+print("-------------------------------------")
 print("KASA INSPECTION")
-print("R : Reference Kaydet")
+print("-------------------------------------")
 print("S : ROI Kaydet")
+print("R : Reference Kaydet")
 print("Q : Çıkış")
+print("-------------------------------------")
 
-# ---------------------------------
+# -------------------------------------------------
 # Ana Döngü
-# ---------------------------------
+# -------------------------------------------------
 
 while True:
 
@@ -83,6 +86,10 @@ while True:
 
     if not ret:
         break
+
+    # -----------------------------------------
+    # ArUco
+    # -----------------------------------------
 
     markers = aruco.detect(frame)
 
@@ -102,7 +109,15 @@ while True:
 
         )
 
+    # -----------------------------------------
+    # Localization
+    # -----------------------------------------
+
     localization = localizer.update(markers)
+
+    # -----------------------------------------
+    # Perspective
+    # -----------------------------------------
 
     reference = reference_frame.generate(
 
@@ -111,6 +126,10 @@ while True:
         localization["frame_corners"]
 
     )
+
+    # -----------------------------------------
+    # Bilgiler
+    # -----------------------------------------
 
     cv2.putText(
 
@@ -122,9 +141,45 @@ while True:
 
         cv2.FONT_HERSHEY_SIMPLEX,
 
-        0.8,
+        0.7,
 
         (0,255,0),
+
+        2
+
+    )
+
+    cv2.putText(
+
+        frame,
+
+        f"VISIBLE : {localization['visible']}",
+
+        (20,65),
+
+        cv2.FONT_HERSHEY_SIMPLEX,
+
+        0.7,
+
+        (255,255,0),
+
+        2
+
+    )
+
+    cv2.putText(
+
+        frame,
+
+        f"CONFIDENCE : {localization['confidence']}%",
+
+        (20,95),
+
+        cv2.FONT_HERSHEY_SIMPLEX,
+
+        0.7,
+
+        (0,200,255),
 
         2
 
@@ -135,132 +190,142 @@ while True:
         frame
     )
 
-    if reference is not None:
-
-        display = roi_manager.draw(reference)
-
-        cv2.imshow(
-            "REFERENCE FRAME",
-            display
-        )
-
-    # ---------------------------------
-    # ROI Analizi
-    # ---------------------------------
+    # -----------------------------------------
+    # Reference hazır mı?
+    # -----------------------------------------
 
     if (
         reference is not None
         and reference_image is not None
-        and roi_manager.selected_roi is not None
     ):
 
-        points = roi_manager.selected_roi["points"]
+        results = {}
 
-        reference_crop = inspection.crop_polygon(
-            reference_image,
-            points
-        )
+        # Devamı 2. parçada...
+                # -----------------------------------------
+        # Tüm ROI'leri Analiz Et
+        # -----------------------------------------
 
-        current_crop = inspection.crop_polygon(
-            reference,
-            points
-        )
+        for roi in roi_manager.get_rois():
 
-        if (
-            reference_crop.size != 0
-            and current_crop.size != 0
-        ):
+            points = roi["points"]
+
+            reference_crop = inspection.crop_polygon(
+                reference_image,
+                points
+            )
+
+            current_crop = inspection.crop_polygon(
+                reference,
+                points
+            )
+
+            if (
+                reference_crop.size == 0
+                or
+                current_crop.size == 0
+            ):
+                continue
 
             result = inspection.compare(
                 reference_crop,
                 current_crop
             )
 
+            state = decision.detect(result)
+
+            expected = recipe.expected(
+                roi["name"]
+            )
+
+            ok = (state == expected)
+
+            results[roi["name"]] = {
+
+                "state": state,
+
+                "expected": expected,
+
+                "ok": ok,
+
+                "change_ratio": result["change_ratio"],
+
+                "changed_pixels": result["changed_pixels"]
+
+            }
+
+        # -----------------------------------------
+        # Sonuçları Çiz
+        # -----------------------------------------
+
+        display = roi_manager.draw_results(
+            reference,
+            results
+        )
+
+        cv2.imshow(
+            "REFERENCE FRAME",
+            display
+        )
+
+        # -----------------------------------------
+        # Debug (İlk ROI)
+        # -----------------------------------------
+
+        if len(results) > 0:
+
+            first_roi = roi_manager.get_rois()[0]
+
+            ref_crop = inspection.crop_polygon(
+                reference_image,
+                first_roi["points"]
+            )
+
+            cur_crop = inspection.crop_polygon(
+                reference,
+                first_roi["points"]
+            )
+
+            debug = inspection.compare(
+                ref_crop,
+                cur_crop
+            )
+
             cv2.imshow(
                 "Reference Crop",
-                result["reference"]
+                debug["reference"]
             )
 
             cv2.imshow(
                 "Current Crop",
-                result["current"]
-            )
-
-            state = decision.detect(result)
-
-            expected = recipe.expected(
-                roi_manager.selected_roi["name"]
-            )
-
-            cv2.putText(
-                result["current"],
-                f"STATE : {state}",
-                (10,25),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0,0,255),
-                2
-            )
-
-            cv2.putText(
-                result["current"],
-                f"EXPECTED : {expected}",
-                (10,50),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (255,0,0),
-                2
-            )
-
-            cv2.putText(
-                result["current"],
-                f"PIXELS : {result['changed_pixels']}",
-                (10,75),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0,255,0),
-                2
-            )
-
-            cv2.putText(
-                result["current"],
-                f"DIFF : %{result['change_ratio']:.2f}",
-                (10,100),
-                cv2.FONT_HERSHEY_SIMPLEX,
-                0.6,
-                (0,255,0),
-                2
-            )
-
-            cv2.imshow(
-                roi_manager.selected_roi["name"],
-                result["current"]
+                debug["current"]
             )
 
             cv2.imshow(
                 "Difference",
-                result["difference"]
+                debug["difference"]
             )
 
             cv2.imshow(
                 "Binary",
-                result["binary"]
+                debug["binary"]
             )
-
-    # ---------------------------------
-    # Tuşlar
-    # ---------------------------------
+                # -------------------------------------------------
+    # Klavye
+    # -------------------------------------------------
 
     key = cv2.waitKey(1) & 0xFF
 
     roi_manager.key_handler(key)
 
+    # ROI Kaydet
     if key == ord("s"):
 
         roi_manager.save(
             ROI_FILE
         )
 
+    # Referans Kaydet
     elif key == ord("r"):
 
         if reference is not None:
@@ -274,11 +339,40 @@ while True:
                 REFERENCE_FILE
             )
 
-            print("[INFO] Reference kaydedildi.")
+            print("[INFO] Reference güncellendi.")
 
+    # Sonuçları Yazdır
+    elif key == ord("p"):
+
+        print("\n-----------------------------")
+
+        for name, data in results.items():
+
+            print(
+
+                f"{name:>3} | "
+
+                f"{data['state']:>5} | "
+
+                f"{data['expected']:>5} | "
+
+                f"{'OK' if data['ok'] else 'NG'} | "
+
+                f"Diff: %{data['change_ratio']:.2f}"
+
+            )
+
+        print("-----------------------------")
+
+    # Çıkış
     elif key == ord("q") or key == 27:
 
         break
+
+
+# -------------------------------------------------
+# Kapat
+# -------------------------------------------------
 
 cap.release()
 

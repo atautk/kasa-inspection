@@ -219,7 +219,6 @@ class ROIManager:
 
         self.rois.append(roi)
 
-
     def find_polygon(self, x, y):
 
         point = (float(x), float(y))
@@ -243,14 +242,12 @@ class ROIManager:
 
         return None
 
-
     def move_polygon(self, roi, dx, dy):
 
         for point in roi["points"]:
 
             point[0] += dx
             point[1] += dy
-
 
     def delete_selected(self):
 
@@ -261,7 +258,6 @@ class ROIManager:
         self.rois.remove(self.selected_roi)
 
         self.selected_roi = None
-
 
     # -----------------------------------------
     # Klavye
@@ -307,7 +303,6 @@ class ROIManager:
 
         print(f"[INFO] {len(self.rois)} ROI kaydedildi.")
 
-
     def load(self, filename):
 
         if not os.path.exists(filename):
@@ -330,7 +325,6 @@ class ROIManager:
 
         return True
 
-
     # -----------------------------------------
     # Yardımcı
     # -----------------------------------------
@@ -347,7 +341,84 @@ class ROIManager:
 
         self.drag_start = None
 
-
     def get_rois(self):
 
         return self.rois
+    
+
+    def draw_results(self, image, results):
+
+        output = image.copy()
+
+        for roi in self.rois:
+
+            name = roi["name"]
+
+            pts = self.points_to_numpy(roi["points"])
+
+            color = (150, 150, 150)
+            
+            text = name
+
+            if name in results:
+
+                if results[name]["ok"]:
+                    color = (0, 255, 0)
+                    text = f"{name} OK"
+
+                else:
+                    color = (0, 0, 255)
+                    text = f"{name} NG"
+
+            cv2.polylines(
+                output,
+                [pts],
+                True,
+                color,
+                2
+            )
+            x = pts[:,0].min()
+            y = pts[:,1].min()
+
+            cv2.putText(
+                output,
+                text,
+                (x, y-8),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.6,
+                color,
+                2
+            )
+
+        return output
+    
+    def points_to_numpy(self,points):
+
+        return np.array(
+            points,
+            dtype=np.int32
+        )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
