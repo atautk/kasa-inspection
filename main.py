@@ -1,5 +1,5 @@
 import cv2
-
+import time
 from modules.aruco_detector import ArucoDetector
 from modules.localization import LocalizationEngine
 from modules.reference_frame import ReferenceFrame
@@ -7,6 +7,7 @@ from modules.roi_manager import ROIManager
 from modules.inspection_engine import InspectionEngine
 from modules.recipe_manager import RecipeManager
 from modules.decision_engine import DecisionEngine
+from modules.dashboard import Dashboard
 
 
 # -------------------------------------------------
@@ -57,6 +58,14 @@ reference_image = inspection.load_reference(
     REFERENCE_FILE
 )
 
+dashboard = Dashboard()
+
+logs = []
+
+fps = 0
+
+inspection_time = 0
+
 # -------------------------------------------------
 # Pencere
 # -------------------------------------------------
@@ -81,6 +90,8 @@ print("-------------------------------------")
 # -------------------------------------------------
 
 while True:
+    
+    start_time = time.perf_counter()
 
     ret, frame = cap.read()
 
@@ -231,6 +242,8 @@ while True:
                 reference_crop,
                 current_crop
             )
+            
+            difference = result["difference"]
 
             state = decision.detect(result)
 
@@ -258,14 +271,42 @@ while True:
         # Sonuçları Çiz
         # -----------------------------------------
 
+        logs.clear()
+
+        for name,data in results.items():
+            if data["ok"]:
+                logs.append(f"{name}:OK")
+            else:
+                logs.append(f"{name}:NG")
+        
         display = roi_manager.draw_results(
             reference,
             results
         )
 
+        dashboard_image = dashboard.render(
+            frame,
+
+            display,
+
+            difference,
+
+            results,
+
+            recipe.recipe["recipe_name"],
+
+            "INSPECTION",
+
+            fps,
+
+            inspection_time,
+
+            logs
+        )
+
         cv2.imshow(
-            "REFERENCE FRAME",
-            display
+            "Dashboard",
+            dashboard_image
         )
 
         # -----------------------------------------
@@ -363,11 +404,18 @@ while True:
             )
 
         print("-----------------------------")
-
+    
     # Çıkış
     elif key == ord("q") or key == 27:
 
         break
+    
+    
+    end_time = time.perf_counter()
+
+    inspection_time = (end_time - start_time)*100
+    
+    fps = 1 / (end_time - start_time + 1e-6)
 
 
 # -------------------------------------------------
