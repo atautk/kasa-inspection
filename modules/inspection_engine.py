@@ -16,8 +16,20 @@ class InspectionEngine:
 
         x, y, w, h = cv2.boundingRect(polygon)
 
-        return masked[y:y+h, x:x+w]
+        margin = 8
 
+        x += margin
+        y += margin
+
+        w -= 2 * margin
+        h -= 2 * margin
+
+        #Güvenlik Kontrolü 
+
+        if w<= 0 or h<=0:
+            return np.array([])
+        
+        return masked[y:y+h, x:x+w]        
 
     def analyze(self, crop):
 
@@ -57,7 +69,6 @@ class InspectionEngine:
         
         print(f"[INFO] Reference kaydedildi: {filename}")
 
-
     def load_reference(self, filename):
         if not os.path.exists(filename):
             print(f"[INFO] Referans dosyası bulunamadı: {filename}")
@@ -68,29 +79,75 @@ class InspectionEngine:
         print(f"[INFO] Referans yüklendi: {filename}")
         
         return image
+      
+    def preprocess(self, image):
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        gray = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        return gray
     
-    def compare(self,referance_crop,current_crop):
+    def difference(self, reference_crop, current_crop):
 
-        #Aynı boyuta getir
-        current_crop = cv2.resize(
-        current_crop,
-        (reference_crop.shape[1], reference_crop.shape[0])
-        )
+        reference = self.preprocess(reference_crop)
 
-        #Farkı hesapla
-        difference = cv2.absdiff(reference_crop, current_crop)
+        current = self.preprocess(current_crop)
 
-        #Farkı gri tonlamaya çevir
-        gray = cv2.cvtColor(difference, cv2.COLOR_BGR2GRAY)
+        reference = cv2.GaussianBlur(reference, (9, 9), 0)
 
-        #Farkın eşik değerini al
-        _, thresh = cv2.threshold(gray, 25, 255, cv2.THRESH_BINARY)
+        current = cv2.GaussianBlur(current, (9, 9), 0)
 
-        changeed_pixels = cv2.countNonZero(thresh)
+        diff = cv2.absdiff(reference, current)
 
-        return{
-            "difference": difference,
-            "threshold": thresh,
-            "changed_pixels": changed_pixels
+        return diff
+
+    def threshold(self, diff):
+        
+        _, binary = cv2.threshold(diff, 40, 255, cv2.THRESH_BINARY)
+
+        return binary
+
+    def morphology(self,binary):
+
+        kernel = np.ones((3,3), np.uint8)
+
+        binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel)
+
+        binary = cv2.morphologyEx(binary, cv2.MORPH_CLOSE, kernel)
+
+        return binary
+
+    def compare(self, reference_crop, current_crop):
+
+        diff = self.difference(reference_crop, current_crop)
+
+        binary = self.threshold(diff)
+
+        binary = self.morphology(binary)
+
+        changed = cv2.countNonZero(binary)
+
+        total = binary.shape[0] * binary.shape[1]
+
+        ratio = (changed / total) * 100
+
+        return {
+            "reference": reference_crop,
+
+            "current": current_crop,
+
+            "difference": diff,
+            
+            "binary": binary,
+            
+            "changed_pixels": changed,
+            
+            "change_ratio": ratio
         }
-    
+
+
+
+
+
+
