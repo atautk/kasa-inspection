@@ -399,6 +399,35 @@ class ROIManager:
             dtype=np.int32
         )
 
+    def draw_info(self,image):
+
+        output = image.copy()
+
+        cv2.rectangle(
+            output,
+            (0,0),
+            (output.shape[1],60),
+            (40,40,40)
+            -1
+        )
+
+        text = f"ROI Count: {len(self.rois)}"
+
+        if self.selected_roi is not None:
+             text += f"    Selected : {self.selected_roi['name']}"
+
+        cv2.putText(
+            output,
+            text,
+            (15, 38),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255,255,255),
+            2
+        )
+
+        return output
+
 
 
 

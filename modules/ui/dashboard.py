@@ -16,6 +16,19 @@ class Dashboard:
 
         self.font = cv2.FONT_HERSHEY_SIMPLEX
 
+        self.window_name = "Dashboard"
+
+        cv2.namedWindow(
+            self.window_name,
+            cv2.WINDOW_NORMAL
+        )
+
+        cv2.resizeWindow(
+            self.window_name,
+            self.width,
+            self.height
+        )
+
     # -------------------------------------------------
     # Dashboard Oluştur
     # -------------------------------------------------
@@ -448,14 +461,10 @@ class Dashboard:
     # Render
     # -------------------------------------------------
 
-    def render(
+    def show(
         self,
-        frame,
-        reference,
-        difference,
-        results,
+        result,
         recipe,
-        mode,
         fps,
         inspection_time,
         logs
@@ -463,11 +472,38 @@ class Dashboard:
 
         canvas = self.create_canvas()
 
+        frame = result["frame"]
+
+        reference = result["reference_display"]
+
+        difference = result["difference"]
+
+        results = result["results"]
+
+        localization = result["localization"]
+
+        mode = "FAIL"
+
+        if localization is not None:
+
+            mode = localization["mode"]
+
+        camera_status = "CONNECTED"
+
+        if not result["success"]:
+
+            camera_status = "ERROR"
+
         self.draw_header(
+
             canvas,
+
             recipe,
+
             mode,
-            "CONNECTED",
+
+            camera_status,
+            
             fps
         )
 
@@ -484,8 +520,11 @@ class Dashboard:
         )
 
         total_ok = sum(
-            1 for r in results.values()
-            if r["ok"]
+            1 
+
+            for r in results.values()
+
+            if r.get("ok",False)
         )
 
         total_ng = len(results) - total_ok
@@ -502,4 +541,20 @@ class Dashboard:
             logs
         )
 
+        cv2.imshow(
+            self.window_name,
+            canvas
+        )
+
         return canvas
+
+    def close(self):
+
+        try:
+            cv2.destroyWindow(
+                self.window_name
+            )
+
+        except cv2.error:
+
+            pass
