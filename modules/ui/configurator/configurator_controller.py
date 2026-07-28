@@ -1,3 +1,5 @@
+import json
+
 from PySide6.QtWidgets import (
     QInputDialog,
     QMessageBox,
@@ -7,6 +9,7 @@ from PySide6.QtCore import Qt, QTimer
 
 from modules.configuration.band_manager import BandManager
 from modules.configuration.reference_manager import ReferenceManager
+from modules.configuration.model_manager import ModelManager
 
 from modules.core.camera import Camera
 from modules.core.aruco_detector import ArucoDetector
@@ -23,8 +26,10 @@ class ConfiguratorController:
 
         self.band_manager = BandManager()
         self.reference_manager = ReferenceManager()
+        self.model_manager = ModelManager()
 
         self.current_band = None
+        self.current_model = None
 
         # ---------- Reference Capture ----------
 
@@ -81,6 +86,46 @@ class ConfiguratorController:
         reference_page.retake_button.clicked.connect(
             self.retake_reference
         )
+
+        roi_page = self.window.roi_page
+
+        roi_page.save_button.clicked.connect(
+            self.save_rois
+        )
+
+        model_page = self.window.model_page
+
+        model_page.new_button.clicked.connect(
+            self.create_model
+        )
+
+        model_page.delete_button.clicked.connect(
+            self.delete_model
+        )
+
+        model_page.save_button.clicked.connect(
+            self.save_model
+        )
+
+        model_page.model_list.currentItemChanged.connect(
+            self.on_model_selected
+        )
+
+        self.window.tabs.currentChanged.connect(
+            self.on_tab_changed
+        )
+
+    # -------------------------------------------------
+
+    def on_tab_changed(self, index: int):
+
+        if index == 2:
+
+            self.load_roi_tab()
+
+        elif index == 3:
+
+            self.load_model_tab()
 
     # -------------------------------------------------
     # Band Yönetimi
@@ -407,6 +452,282 @@ class ConfiguratorController:
         self._update_roi_tab_state()
 
         self.start_camera()
+
+    # -------------------------------------------------
+    # ROI Sekmesi
+    # -------------------------------------------------
+
+    def load_roi_tab(self):
+
+        if self.current_band is None:
+            return
+
+        page = self.window.roi_page
+
+        if not self.reference_manager.exists(self.current_band):
+
+            page.clear()
+            page.set_status(
+                "Reference bulunamadı. Önce Reference sekmesinden "
+                "fotoğraf çekin."
+            )
+            return
+
+        image = self.reference_manager.load(self.current_band)
+        page.set_background(image)
+
+        rois = self._read_roi_file()
+        page.load_rois(rois)
+
+        page.set_status(
+            f"{len(rois)} ROI yüklendi."
+        )
+
+    # -------------------------------------------------
+
+    def save_rois(self):
+
+        if self.current_band is None:
+            return
+
+        rois = self.window.roi_page.get_rois()
+
+        data = {
+            "version": "1.0",
+            "rois": rois
+        }
+
+        with open(
+            self.current_band.roi,
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                data,
+                f,
+                indent=4,
+                ensure_ascii=False
+            )
+
+        self.window.roi_page.set_status(
+            f"{len(rois)} ROI kaydedildi."
+        )
+
+        QMessageBox.information(
+
+            self.window,
+
+            "Başarılı",
+
+            f"{len(rois)} ROI roi.json dosyasına kaydedildi."
+
+        )
+
+    # -------------------------------------------------
+
+    def _read_roi_file(self) -> list:
+
+        roi_file = self.current_band.roi
+
+        if not roi_file.exists():
+            return []
+
+        try:
+
+            with open(
+                roi_file,
+                "r",
+                encoding="utf-8"
+            ) as f:
+
+                data = json.load(f)
+
+            return data.get("rois", [])
+
+        except Exception:
+
+            return []
+
+    # -------------------------------------------------
+    # Model Sekmesi
+    # -------------------------------------------------
+
+    def load_model_tab(self):
+
+        if self.current_band is None:
+            return
+
+        page = self.window.model_page
+
+        models = self.model_manager.list_models(
+            self.current_band
+        )
+
+        page.set_models([
+            {"id": model.id, "name": model.name}
+            for model in models
+        ])
+
+        page.clear_roi_checklist()
+
+        self.current_model = None
+
+        page.set_status(f"{len(models)} model bulundu.")
+
+    # -------------------------------------------------
+
+    def on_model_selected(self, current, previous):
+
+        page = self.window.model_page
+
+        model_id = page.get_selected_model_id()
+
+        if model_id is None:
+
+            self.current_model = None
+            page.clear_roi_checklist()
+            return
+
+        self.current_model = self.model_manager.load_model(
+            self.current_band,
+            model_id
+        )
+
+        roi_names = self._roi_names()
+
+        page.set_roi_checklist(
+            roi_names,
+            self.current_model.expected_rois
+        )
+
+        page.set_status(f"{self.current_model.name} yüklendi.")
+
+    # -------------------------------------------------
+
+    def create_model(self):
+
+        if self.current_band is None:
+            return
+
+        name, ok = QInputDialog.getText(
+
+            self.window,
+
+            "Yeni Model",
+
+            "Model Adı"
+
+        )
+
+        if not ok:
+            return
+
+        name = name.strip()
+
+        if name == "":
+            return
+
+        self.model_manager.create_model(
+            self.current_band,
+            name
+        )
+
+        self.load_model_tab()
+
+    # -------------------------------------------------
+
+    def delete_model(self):
+
+        page = self.window.model_page
+
+        model_id = page.get_selected_model_id()
+
+        if model_id is None:
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Uyarı",
+
+                "Lütfen bir model seçin."
+
+            )
+
+            return
+
+        answer = QMessageBox.question(
+
+            self.window,
+
+            "Emin misiniz?",
+
+            "Model silinecek. Devam edilsin mi?"
+
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        self.model_manager.delete_model(
+            self.current_band,
+            model_id
+        )
+
+        self.load_model_tab()
+
+    # -------------------------------------------------
+
+    def save_model(self):
+
+        if self.current_model is None:
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Uyarı",
+
+                "Lütfen bir model seçin."
+
+            )
+
+            return
+
+        page = self.window.model_page
+
+        self.current_model.expected_rois = (
+            page.get_checked_rois()
+        )
+
+        self.model_manager.save_model(
+            self.current_band,
+            self.current_model
+        )
+
+        page.set_status(
+            f"{self.current_model.name} kaydedildi."
+        )
+
+        QMessageBox.information(
+
+            self.window,
+
+            "Başarılı",
+
+            f"{self.current_model.name} kaydedildi."
+
+        )
+
+    # -------------------------------------------------
+
+    def _roi_names(self) -> list:
+
+        return [
+            roi.get("name", "")
+            for roi in self._read_roi_file()
+        ]
 
     # -------------------------------------------------
     # Yardımcılar

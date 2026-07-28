@@ -1,0 +1,10 @@
+{
+    "id": "clio",
+    "name": "clio",
+    "version": "1.0",
+    "expected_rois": [
+        "G01",
+        "G03",
+        "G05"
+    ]
+}
