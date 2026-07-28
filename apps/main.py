@@ -1,3 +1,10 @@
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+
 import cv2
 import time
 
@@ -22,11 +29,11 @@ from modules.controllers.keyboard_controller import KeyboardController
 
 BOX_NAME = "kasa_001"
 
-ROI_FILE = f"recipes/{BOX_NAME}/roi.json"
+ROI_FILE = ROOT / "recipes" / BOX_NAME / "roi.json"
 
-REFERENCE_FILE = f"recipes/{BOX_NAME}/reference.png"
+REFERENCE_FILE = ROOT / "recipes" / BOX_NAME / "reference.png"
 
-RECIPE_FILE = f"recipes/{BOX_NAME}/recipes.json"
+RECIPE_FILE = ROOT / "recipes" / BOX_NAME / "recipes.json"
 
 
 # -------------------------------------------------
