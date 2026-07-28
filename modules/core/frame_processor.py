@@ -1,3 +1,6 @@
+import traceback
+
+
 class FrameProcessor:
 
     def __init__(
@@ -16,30 +19,43 @@ class FrameProcessor:
 
     def process(self, frame):
 
+        if frame is None:
+
+            return {
+
+                "success": False,
+
+                "error": "Frame is None",
+
+                "frame": None,
+
+                "markers": {},
+
+                "localization": None,
+
+                "reference": None
+
+            }
+
         try:
 
-            # -----------------------------
-            # ArUco Detection
-            # -----------------------------
-
             markers = self.aruco.detect(frame)
-
-            # -----------------------------
-            # Localization
-            # -----------------------------
 
             localization = self.localizer.update(
                 markers
             )
 
-            # -----------------------------
-            # Perspective Transform
-            # -----------------------------
+            reference = None
 
-            reference = self.reference_frame.generate(
-                frame,
-                localization["frame_corners"]
-            )
+            if localization["frame_corners"] is not None:
+
+                reference = self.reference_frame.generate(
+
+                    frame,
+
+                    localization["frame_corners"]
+
+                )
 
             return {
 
@@ -58,6 +74,8 @@ class FrameProcessor:
             }
 
         except Exception as e:
+
+            traceback.print_exc()
 
             return {
 

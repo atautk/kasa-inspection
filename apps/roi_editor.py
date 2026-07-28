@@ -94,7 +94,7 @@ while True:
 
         cv2.polylines(
             frame,
-            [marker["corners"].astype(int)],
+            [marker.corners.astype(int)],
             True,
             (0,255,0),
             2

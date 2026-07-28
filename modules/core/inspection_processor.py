@@ -1,3 +1,6 @@
+import traceback
+
+
 class InspectionProcessor:
 
     def __init__(
@@ -23,73 +26,115 @@ class InspectionProcessor:
         reference_image
     ):
 
+        results = {}
+
+        difference = {}
+
+        debug = {}
+
         try:
-
-            results = {}
-
-            difference = None
-
-            debug = None
 
             for roi in self.roi_manager.get_rois():
 
-                points = roi["points"]
+                try:
 
-                # ---------------------------------
-                # Crop
-                # ---------------------------------
+                    roi_name = roi["name"]
+                    points = roi["points"]
 
-                reference_crop = self.inspection.crop_polygon(
-                    reference_image,
-                    points
-                )
+                    # ---------------------------------
+                    # Crop
+                    # ---------------------------------
 
-                current_crop = self.inspection.crop_polygon(
-                    reference,
-                    points
-                )
+                    reference_crop = self.inspection.crop_polygon(
+                        reference_image,
+                        points
+                    )
 
-                if (
-                    reference_crop.size == 0
-                    or
-                    current_crop.size == 0
-                ):
-                    continue
+                    current_crop = self.inspection.crop_polygon(
+                        reference,
+                        points
+                    )
 
-                # ---------------------------------
-                # Compare
-                # ---------------------------------
+                    if (
+                        reference_crop.size == 0
+                        or
+                        current_crop.size == 0
+                    ):
 
-                compare = self.inspection.compare(
-                    reference_crop,
-                    current_crop
-                )
+                        results[roi_name] = {
 
-                state = self.decision.detect(
-                    compare
-                )
+                            "state": "INVALID",
 
-                expected = self.recipe.expected(
-                    roi["name"]
-                )
+                            "expected": self.recipe.expected(
+                                roi_name
+                            ),
 
-                results[roi["name"]] = {
+                            "ok": False,
 
-                    "state": state,
+                            "change_ratio": 0,
 
-                    "expected": expected,
+                            "changed_pixels": 0
 
-                    "ok": state == expected,
+                        }
 
-                    "change_ratio": compare["change_ratio"],
+                        continue
 
-                    "changed_pixels": compare["changed_pixels"]
+                    # ---------------------------------
+                    # Compare
+                    # ---------------------------------
 
-                }
+                    compare = self.inspection.compare(
+                        reference_crop,
+                        current_crop
+                    )
 
-                difference = compare["difference"]
+                    state = self.decision.detect(
+                        compare
+                    )
 
-                debug = compare
+                    expected = self.recipe.expected(
+                        roi_name
+                    )
+
+                    results[roi_name] = {
+
+                        "state": state,
+
+                        "expected": expected,
+
+                        "ok": state == expected,
+
+                        "change_ratio": compare["change_ratio"],
+
+                        "changed_pixels": compare["changed_pixels"]
+
+                    }
+
+                    difference[roi_name] = compare.get(
+                        "difference"
+                    )
+
+                    debug[roi_name] = compare
+
+                except Exception as e:
+
+                    traceback.print_exc()
+
+                    results[roi["name"]] = {
+
+                        "state": "ERROR",
+
+                        "expected": None,
+
+                        "ok": False,
+
+                        "change_ratio": 0,
+
+                        "changed_pixels": 0,
+
+                        "error": str(e)
+
+                    }
 
             return {
 
@@ -107,6 +152,8 @@ class InspectionProcessor:
 
         except Exception as e:
 
+            traceback.print_exc()
+
             return {
 
                 "success": False,
@@ -115,8 +162,8 @@ class InspectionProcessor:
 
                 "results": {},
 
-                "difference": None,
+                "difference": {},
 
-                "debug": None
+                "debug": {}
 
             }

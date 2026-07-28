@@ -14,6 +14,7 @@ from modules.core.reference_frame import ReferenceFrame
 from modules.core.inspection_engine import InspectionEngine
 from modules.core.recipe_manager import RecipeManager
 from modules.core.decision_engine import DecisionEngine
+from modules.configuration.reference_manager import ReferenceManager
 
 from modules.ui.roi_manager import ROIManager
 from modules.ui.dashboard import Dashboard
@@ -27,13 +28,8 @@ from modules.controllers.keyboard_controller import KeyboardController
 # DOSYALAR
 # -------------------------------------------------
 
-BOX_NAME = "kasa_001"
-
-ROI_FILE = ROOT / "recipes" / BOX_NAME / "roi.json"
-
-REFERENCE_FILE = ROOT / "recipes" / BOX_NAME / "reference.png"
-
-RECIPE_FILE = ROOT / "recipes" / BOX_NAME / "recipes.json"
+from modules.configuration.band_manager import BandManager
+from modules.configuration.reference_manager import ReferenceManager
 
 
 # -------------------------------------------------
@@ -79,7 +75,7 @@ inspection_engine = InspectionEngine()
 
 roi_manager = ROIManager()
 roi_manager.load(
-    ROI_FILE
+    band.roi
 )
 
 recipe_manager = RecipeManager()
@@ -89,11 +85,12 @@ recipe_manager.load(
 
 decision_engine = DecisionEngine()
 
+reference_manager = ReferenceManager()
+
 
 reference_image = inspection_engine.load_reference(
     REFERENCE_FILE
 )
-
 
 inspection_controller = InspectionController(
 
@@ -120,6 +117,19 @@ debug_view = DebugView()
 
 keyboard = KeyboardController()
 
+band_manager = BandManager()
+
+bands = band_manager.list_bands()
+
+if not bands:
+
+    print("Hiç bant bulunamadı.")
+
+    print("Önce Configurator ile bant oluştur.")
+
+    exit()
+
+band = bands[0]
 
 # -------------------------------------------------
 # PENCERE
@@ -232,7 +242,7 @@ while running:
 
         result,
 
-        recipe_manager.recipe["recipe_name"],
+        recipe_manager.recipe_name(),
 
         fps,
 
@@ -274,21 +284,18 @@ while running:
 
         if result["reference"] is not None:
 
-            inspection_engine.save_reference(
+           reference_manager.save(
 
-                result["reference"],
+               REFERENCE_FILE,
 
-                REFERENCE_FILE
+               result["reference"]
+           )
 
-            )
+           reference_image= reference_manager.load(
+               band
+           )
 
-            reference_image = inspection_engine.load_reference(
-
-                REFERENCE_FILE
-
-            )
-
-            print("[INFO] Reference güncellendi.")
+           print("[INFO] Reference güncellendi.")
 
     # Sonuçları Yazdır
 
