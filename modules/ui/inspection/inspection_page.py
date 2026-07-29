@@ -39,6 +39,8 @@ class InspectionPage(QWidget):
         set_start_button_text(text)
         set_debug_button_text(text)
         enable_selection(enabled: bool)
+        show_ng_alert()
+        hide_ng_alert()
 
     Controller'ın dinlediği sinyaller:
 
@@ -64,6 +66,17 @@ class InspectionPage(QWidget):
         super().__init__()
 
         root = QVBoxLayout(self)
+
+        # ---------- NG Uyarı Bannerı ----------
+
+        self.ng_banner = QLabel("⚠ NG !")
+        self.ng_banner.setAlignment(Qt.AlignCenter)
+        self.ng_banner.setStyleSheet(
+            "background-color: #cc0000; color: white; "
+            "font-size: 22px; font-weight: bold; padding: 10px;"
+        )
+        self.ng_banner.hide()
+        root.addWidget(self.ng_banner)
 
         # ---------- Üst Seçim Satırı ----------
 
@@ -278,3 +291,15 @@ class InspectionPage(QWidget):
     def set_debug_button_text(self, text: str):
 
         self.debug_button.setText(text)
+
+    # -------------------------------------------------
+    # NG Uyarısı
+    # -------------------------------------------------
+
+    def show_ng_alert(self):
+
+        self.ng_banner.show()
+
+    def hide_ng_alert(self):
+
+        self.ng_banner.hide()

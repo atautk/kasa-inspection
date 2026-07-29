@@ -1,4 +1,5 @@
 import time
+import winsound
 
 import cv2
 
@@ -55,6 +56,7 @@ class InspectionUIController:
         self.inspection_controller = None
         self.inspection_logger = None
         self.ng_capture_manager = NGCaptureManager()
+        self.last_alert_state = None
 
         self.reference_image = None
         self.last_reference = None
@@ -271,6 +273,8 @@ class InspectionUIController:
         self.page.set_status("Durduruldu")
         self.page.clear_image()
         self.page.clear_results()
+        self.page.hide_ng_alert()
+        self.last_alert_state = None
 
         self.debug_view.close()
 
@@ -387,6 +391,26 @@ class InspectionUIController:
         )
 
     # -------------------------------------------------
+    # NG Uyarısı
+    # -------------------------------------------------
+
+    def _update_ng_alert(self, overall_result):
+
+        if overall_result == "NG":
+
+            self.page.show_ng_alert()
+
+            if self.last_alert_state != "NG":
+
+                winsound.MessageBeep(winsound.MB_ICONHAND)
+
+        else:
+
+            self.page.hide_ng_alert()
+
+        self.last_alert_state = overall_result
+
+    # -------------------------------------------------
     # Kamera Döngüsü
     # -------------------------------------------------
 
@@ -432,6 +456,18 @@ class InspectionUIController:
 
         self.page.set_results(result["results"])
 
+        overall_result = None
+
+        if result["results"]:
+
+            overall_result = (
+                "OK"
+                if all(data["ok"] for data in result["results"].values())
+                else "NG"
+            )
+
+            self._update_ng_alert(overall_result)
+
         if (
             self.inspection_logger is not None
             and result["results"]
@@ -442,12 +478,6 @@ class InspectionUIController:
                 self.current_model.name
                 if self.current_model is not None
                 else None
-            )
-
-            overall_result = (
-                "OK"
-                if all(data["ok"] for data in result["results"].values())
-                else "NG"
             )
 
             image_path = None
