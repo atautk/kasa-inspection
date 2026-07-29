@@ -15,6 +15,7 @@ from modules.configuration.band_manager import BandManager
 from modules.configuration.model_manager import ModelManager
 from modules.configuration.reference_manager import ReferenceManager
 from modules.configuration.model_recipe_adapter import ModelRecipeAdapter
+from modules.configuration.inspection_logger import InspectionLogger
 
 from modules.ui.roi_manager import ROIManager
 from modules.ui.debug_view import DebugView
@@ -50,6 +51,7 @@ class InspectionUIController:
         self.roi_manager = ROIManager()
 
         self.inspection_controller = None
+        self.inspection_logger = None
 
         self.reference_image = None
         self.last_reference = None
@@ -120,6 +122,8 @@ class InspectionUIController:
             return
 
         self.current_band = self.bands[index]
+
+        self.inspection_logger = InspectionLogger(self.current_band)
 
         self.roi_manager.load(self.current_band.roi)
 
@@ -347,6 +351,19 @@ class InspectionUIController:
         self.page.set_image(display)
 
         self.page.set_results(result["results"])
+
+        if self.inspection_logger is not None:
+
+            model_name = (
+                self.current_model.name
+                if self.current_model is not None
+                else None
+            )
+
+            self.inspection_logger.log_if_changed(
+                result["results"],
+                model_name
+            )
 
         localization = result["localization"]
 
