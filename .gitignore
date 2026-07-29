@@ -16,5 +16,8 @@ venv/
 # Inspection log veritabanları (çalışma zamanı verisi, banda özel)
 inspection_log.db
 
+# NG kareleri (çalışma zamanı verisi, banda özel)
+ng_captures/
+
 # Kamera kalibrasyon çıktıları (istersen bunları sonradan ekleyebilirsin)
 # calibration/*.npy

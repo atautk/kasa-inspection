@@ -16,9 +16,11 @@ from modules.configuration.model_manager import ModelManager
 from modules.configuration.reference_manager import ReferenceManager
 from modules.configuration.model_recipe_adapter import ModelRecipeAdapter
 from modules.configuration.inspection_logger import InspectionLogger
+from modules.configuration.ng_capture_manager import NGCaptureManager
 
 from modules.ui.roi_manager import ROIManager
 from modules.ui.debug_view import DebugView
+from modules.ui.inspection.log_viewer_dialog import LogViewerDialog
 
 from modules.controllers.inspection_controller import InspectionController
 
@@ -52,6 +54,7 @@ class InspectionUIController:
 
         self.inspection_controller = None
         self.inspection_logger = None
+        self.ng_capture_manager = NGCaptureManager()
 
         self.reference_image = None
         self.last_reference = None
@@ -64,6 +67,8 @@ class InspectionUIController:
         self.debug_view.disable()
 
         self.last_tick_time = None
+
+        self.log_dialog = None
 
         self.timer = QTimer()
         self.timer.setInterval(self.TIMER_INTERVAL_MS)
@@ -97,6 +102,10 @@ class InspectionUIController:
 
         self.page.debug_button.clicked.connect(
             self._on_debug_clicked
+        )
+
+        self.page.history_button.clicked.connect(
+            self._on_history_clicked
         )
 
     # -------------------------------------------------
@@ -312,6 +321,72 @@ class InspectionUIController:
             self.page.set_debug_button_text("Debug Göster")
 
     # -------------------------------------------------
+    # Geçmiş
+    # -------------------------------------------------
+
+    def _on_history_clicked(self):
+
+        if self.inspection_logger is None or self.current_band is None:
+
+            QMessageBox.warning(
+                self.window,
+                "Uyarı",
+                "Önce bir band seçin."
+            )
+
+            return
+
+        if self.log_dialog is not None:
+
+            self.log_dialog.reload()
+            self.log_dialog.show()
+            self.log_dialog.raise_()
+            self.log_dialog.activateWindow()
+            return
+
+        self.log_dialog = LogViewerDialog(
+            self.inspection_logger,
+            self.current_band.name,
+            self.window
+        )
+
+        self.log_dialog.finished.connect(self._on_history_closed)
+
+        self.log_dialog.clear_button.clicked.connect(
+            self._on_clear_history_clicked
+        )
+
+        self.log_dialog.show()
+
+    def _on_history_closed(self):
+
+        self.log_dialog = None
+
+    def _on_clear_history_clicked(self):
+
+        answer = QMessageBox.question(
+            self.window,
+            "Emin misiniz?",
+            "Bu bandın tüm inspection geçmişi ve NG fotoğrafları "
+            "silinecek. Devam edilsin mi?"
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        self.inspection_logger.clear()
+        self.ng_capture_manager.clear(self.current_band)
+
+        if self.log_dialog is not None:
+            self.log_dialog.reload()
+
+        QMessageBox.information(
+            self.window,
+            "Başarılı",
+            "Geçmiş temizlendi."
+        )
+
+    # -------------------------------------------------
     # Kamera Döngüsü
     # -------------------------------------------------
 
@@ -357,7 +432,7 @@ class InspectionUIController:
 
         self.page.set_results(result["results"])
 
-        if self.inspection_logger is not None:
+        if self.inspection_logger is not None and result["results"]:
 
             model_name = (
                 self.current_model.name
@@ -365,9 +440,30 @@ class InspectionUIController:
                 else None
             )
 
+            overall_result = (
+                "OK"
+                if all(data["ok"] for data in result["results"].values())
+                else "NG"
+            )
+
+            image_path = None
+
+            is_new_ng = (
+                overall_result == "NG"
+                and overall_result != self.inspection_logger.last_overall_result
+            )
+
+            if is_new_ng:
+
+                image_path = self.ng_capture_manager.save(
+                    self.current_band,
+                    display
+                )
+
             self.inspection_logger.log_if_changed(
                 result["results"],
-                model_name
+                model_name,
+                image_path
             )
 
         localization = result["localization"]

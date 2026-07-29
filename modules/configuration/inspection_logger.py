@@ -37,6 +37,19 @@ class InspectionLogger:
                 """
             )
 
+            columns = [
+                row[1]
+                for row in conn.execute(
+                    "PRAGMA table_info(inspections)"
+                ).fetchall()
+            ]
+
+            if "image_path" not in columns:
+
+                conn.execute(
+                    "ALTER TABLE inspections ADD COLUMN image_path TEXT"
+                )
+
             conn.commit()
 
         finally:
@@ -47,7 +60,12 @@ class InspectionLogger:
     # Sonuç Değiştiyse Logla
     # -------------------------------------------------
 
-    def log_if_changed(self, results: dict, model_name: str | None) -> bool:
+    def log_if_changed(
+        self,
+        results: dict,
+        model_name: str | None,
+        image_path: str | None = None
+    ) -> bool:
 
         if not results:
             return False
@@ -63,13 +81,13 @@ class InspectionLogger:
 
         self.last_overall_result = overall_result
 
-        self._insert(overall_result, model_name, results)
+        self._insert(overall_result, model_name, results, image_path)
 
         return True
 
     # -------------------------------------------------
 
-    def _insert(self, overall_result, model_name, results):
+    def _insert(self, overall_result, model_name, results, image_path=None):
 
         roi_results = {
             name: {
@@ -88,14 +106,15 @@ class InspectionLogger:
             conn.execute(
                 """
                 INSERT INTO inspections
-                    (timestamp, model_name, overall_result, roi_results)
-                VALUES (?, ?, ?, ?)
+                    (timestamp, model_name, overall_result, roi_results, image_path)
+                VALUES (?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
                     model_name,
                     overall_result,
-                    json.dumps(roi_results, ensure_ascii=False)
+                    json.dumps(roi_results, ensure_ascii=False),
+                    image_path
                 )
             )
 
@@ -131,3 +150,23 @@ class InspectionLogger:
             conn.close()
 
         return [dict(row) for row in rows]
+
+    # -------------------------------------------------
+    # Geçmişi Temizle
+    # -------------------------------------------------
+
+    def clear(self):
+
+        conn = sqlite3.connect(self.db_path)
+
+        try:
+
+            conn.execute("DELETE FROM inspections")
+
+            conn.commit()
+
+        finally:
+
+            conn.close()
+
+        self.last_overall_result = None

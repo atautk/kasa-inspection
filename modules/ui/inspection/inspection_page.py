@@ -47,6 +47,7 @@ class InspectionPage(QWidget):
         start_button.clicked
         save_reference_button.clicked
         debug_button.clicked
+        history_button.clicked
     """
 
     COLUMNS = [
@@ -88,6 +89,9 @@ class InspectionPage(QWidget):
 
         self.debug_button = QPushButton("Debug Göster")
         selection_row.addWidget(self.debug_button)
+
+        self.history_button = QPushButton("Geçmiş")
+        selection_row.addWidget(self.history_button)
 
         root.addLayout(selection_row)
 
