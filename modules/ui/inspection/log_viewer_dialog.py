@@ -17,13 +17,15 @@ from PySide6.QtWidgets import (
     QPushButton,
     QFrame,
     QSizePolicy,
-    QMessageBox
+    QMessageBox,
+    QFileDialog
 )
 from PySide6.QtGui import QImage, QPixmap, QColor
 from PySide6.QtCore import Qt, Signal
 
 from .image_preview_dialog import ImagePreviewDialog
 from ..window_utils import restore_or_center, save_geometry
+from modules.configuration.inspection_log_exporter import InspectionLogExporter
 
 SETTINGS_KEY = "log_viewer"
 
@@ -50,6 +52,8 @@ class LogViewerDialog(QDialog):
         super().__init__(parent)
 
         self.inspection_logger = inspection_logger
+        self.band_name = band_name
+        self.log_exporter = InspectionLogExporter()
         self.rows = []
 
         self.current_record = None
@@ -70,6 +74,10 @@ class LogViewerDialog(QDialog):
         self.refresh_button = QPushButton("Yenile")
         self.refresh_button.clicked.connect(self.reload)
         top_row.addWidget(self.refresh_button)
+
+        self.export_excel_button = QPushButton("Excel'e Aktar")
+        self.export_excel_button.clicked.connect(self._on_export_excel_clicked)
+        top_row.addWidget(self.export_excel_button)
 
         self.clear_button = QPushButton("Geçmişi Temizle")
         top_row.addWidget(self.clear_button)
@@ -220,6 +228,46 @@ class LogViewerDialog(QDialog):
         save_geometry(self, SETTINGS_KEY)
 
         super().closeEvent(event)
+
+    # -------------------------------------------------
+    # Excel'e Aktar
+    # -------------------------------------------------
+
+    def _on_export_excel_clicked(self):
+
+        path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Excel'e Aktar",
+            f"{self.band_name}_inspection_log.xlsx",
+            "Excel Dosyası (*.xlsx)"
+        )
+
+        if not path:
+            return
+
+        try:
+
+            self.log_exporter.export(
+                self.inspection_logger,
+                path,
+                band_name=self.band_name
+            )
+
+        except Exception as e:
+
+            QMessageBox.critical(
+                self,
+                "Hata",
+                f"Excel'e aktarma başarısız: {e}"
+            )
+
+            return
+
+        QMessageBox.information(
+            self,
+            "Başarılı",
+            f"Inspection geçmişi şu dosyaya aktarıldı:\n{path}"
+        )
 
     # -------------------------------------------------
     # Yeniden Yükle

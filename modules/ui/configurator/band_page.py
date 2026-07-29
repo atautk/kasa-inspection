@@ -32,6 +32,18 @@ class BandPage(QWidget):
         self.validate_button = QPushButton("Doğrula")
         layout.addWidget(self.validate_button)
 
+        # ---------- Dışa / İçe Aktar ----------
+
+        export_row = QHBoxLayout()
+
+        self.export_button = QPushButton("Dışa Aktar")
+        export_row.addWidget(self.export_button)
+
+        self.import_button = QPushButton("İçe Aktar")
+        export_row.addWidget(self.import_button)
+
+        layout.addLayout(export_row)
+
         # ---------- Eşik Ayarı ----------
 
         threshold_row = QHBoxLayout()

@@ -4,7 +4,8 @@ from pathlib import Path
 from PySide6.QtWidgets import (
     QInputDialog,
     QMessageBox,
-    QListWidgetItem
+    QListWidgetItem,
+    QFileDialog
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -12,6 +13,7 @@ from modules.configuration.band_manager import BandManager
 from modules.configuration.reference_manager import ReferenceManager
 from modules.configuration.model_manager import ModelManager
 from modules.configuration.configuration_validator import ConfigurationValidator
+from modules.configuration.band_export_manager import BandExportManager
 
 # modules/ui/configurator/configurator_controller.py -> proje kökü
 ROOT = Path(__file__).resolve().parents[3]
@@ -33,6 +35,7 @@ class ConfiguratorController:
         self.reference_manager = ReferenceManager()
         self.model_manager = ModelManager()
         self.validator = ConfigurationValidator()
+        self.export_manager = BandExportManager()
 
         self.current_band = None
         self.current_model = None
@@ -85,6 +88,14 @@ class ConfiguratorController:
 
         band_page.save_threshold_button.clicked.connect(
             self.save_threshold
+        )
+
+        band_page.export_button.clicked.connect(
+            self.export_band
+        )
+
+        band_page.import_button.clicked.connect(
+            self.import_band
         )
 
         reference_page = self.window.reference_page
@@ -323,6 +334,99 @@ class ConfiguratorController:
                 f"{message}"
 
             )
+
+    # -------------------------------------------------
+    # Dışa / İçe Aktar
+    # -------------------------------------------------
+
+    def export_band(self):
+
+        page = self.window.band_page
+
+        item = page.band_list.currentItem()
+
+        if item is None:
+
+            QMessageBox.warning(
+                self.window,
+                "Uyarı",
+                "Lütfen dışa aktarılacak bir band seçin."
+            )
+
+            return
+
+        band_id = item.data(Qt.UserRole)
+
+        band = self.band_manager.load_band(band_id)
+
+        path, _ = QFileDialog.getSaveFileName(
+            self.window,
+            "Bandı Dışa Aktar",
+            f"{band.name}.zip",
+            "Zip Dosyası (*.zip)"
+        )
+
+        if not path:
+            return
+
+        try:
+
+            self.export_manager.export_band(band, path)
+
+        except Exception as e:
+
+            QMessageBox.critical(
+                self.window,
+                "Hata",
+                f"Dışa aktarma başarısız: {e}"
+            )
+
+            return
+
+        QMessageBox.information(
+            self.window,
+            "Başarılı",
+            f"{band.name} şu dosyaya aktarıldı:\n{path}"
+        )
+
+    # -------------------------------------------------
+
+    def import_band(self):
+
+        path, _ = QFileDialog.getOpenFileName(
+            self.window,
+            "Band İçe Aktar",
+            "",
+            "Zip Dosyası (*.zip)"
+        )
+
+        if not path:
+            return
+
+        try:
+
+            band = self.export_manager.import_band(
+                self.band_manager,
+                path
+            )
+
+        except Exception as e:
+
+            QMessageBox.critical(
+                self.window,
+                "Hata",
+                f"İçe aktarma başarısız: {e}"
+            )
+
+            return
+
+        self.load_bands()
+
+        QMessageBox.information(
+            self.window,
+            "Başarılı",
+            f"{band.name} yeni bir band olarak içe aktarıldı."
+        )
 
     # -------------------------------------------------
     # Reference Sekmesi
