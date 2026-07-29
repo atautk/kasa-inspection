@@ -12,12 +12,14 @@ from modules.core.aruco_detector import ArucoDetector
 from modules.core.localization import LocalizationEngine
 from modules.core.reference_frame import ReferenceFrame
 from modules.core.inspection_engine import InspectionEngine
-from modules.core.recipe_manager import RecipeManager
 from modules.core.decision_engine import DecisionEngine
+
+from modules.configuration.band_manager import BandManager
 from modules.configuration.reference_manager import ReferenceManager
+from modules.configuration.model_manager import ModelManager
+from modules.configuration.model_recipe_adapter import ModelRecipeAdapter
 
 from modules.ui.roi_manager import ROIManager
-from modules.ui.dashboard import Dashboard
 from modules.ui.debug_view import DebugView
 
 from modules.controllers.inspection_controller import InspectionController
@@ -25,11 +27,47 @@ from modules.controllers.keyboard_controller import KeyboardController
 
 
 # -------------------------------------------------
-# DOSYALAR
+# BAND SEÇ
 # -------------------------------------------------
 
-from modules.configuration.band_manager import BandManager
-from modules.configuration.reference_manager import ReferenceManager
+band_manager = BandManager(root=ROOT / "configuration")
+
+bands = band_manager.list_bands()
+
+if not bands:
+
+    print("Hiç bant bulunamadı.")
+
+    print("Önce Configurator ile bant oluştur.")
+
+    exit()
+
+band = bands[0]
+
+print(f"[INFO] Band: {band.name}")
+
+
+# -------------------------------------------------
+# MODEL SEÇ
+# -------------------------------------------------
+
+model_manager = ModelManager()
+
+models = model_manager.list_models(band)
+
+if not models:
+
+    print(f"[UYARI] '{band.name}' bandında hiç model yok.")
+
+    print("Configurator > Models sekmesinden en az bir model oluştur.")
+
+    selected_model = None
+
+else:
+
+    selected_model = models[0]
+
+    print(f"[INFO] Model: {selected_model.name}")
 
 
 # -------------------------------------------------
@@ -37,7 +75,7 @@ from modules.configuration.reference_manager import ReferenceManager
 # -------------------------------------------------
 
 cap = cv2.VideoCapture(
-    0,
+    band.camera,
     cv2.CAP_DSHOW
 )
 
@@ -78,19 +116,20 @@ roi_manager.load(
     band.roi
 )
 
-recipe_manager = RecipeManager()
-recipe_manager.load(
-    RECIPE_FILE
-)
+recipe_manager = ModelRecipeAdapter(selected_model)
 
 decision_engine = DecisionEngine()
 
 reference_manager = ReferenceManager()
 
+reference_image = reference_manager.load(band)
 
-reference_image = inspection_engine.load_reference(
-    REFERENCE_FILE
-)
+if reference_image is None:
+
+    print(f"[UYARI] '{band.name}' bandında reference.png yok.")
+
+    print("Configurator > Reference sekmesinden fotoğraf çek.")
+
 
 inspection_controller = InspectionController(
 
@@ -111,25 +150,10 @@ inspection_controller = InspectionController(
 )
 
 
-dashboard = Dashboard()
-
 debug_view = DebugView()
 
 keyboard = KeyboardController()
 
-band_manager = BandManager()
-
-bands = band_manager.list_bands()
-
-if not bands:
-
-    print("Hiç bant bulunamadı.")
-
-    print("Önce Configurator ile bant oluştur.")
-
-    exit()
-
-band = bands[0]
 
 # -------------------------------------------------
 # PENCERE
@@ -159,8 +183,6 @@ cv2.setMouseCallback(
 fps = 0
 
 inspection_time = 0
-
-logs = []
 
 
 print("-------------------------------------")
@@ -198,7 +220,7 @@ while running:
 
     )
 
-        # -----------------------------------------
+    # -----------------------------------------
     # Hata Kontrolü
     # -----------------------------------------
 
@@ -223,36 +245,6 @@ while running:
         )
 
     # -----------------------------------------
-    # Dashboard
-    # -----------------------------------------
-
-    logs.clear()
-
-    for name, data in result["results"].items():
-
-        if data["ok"]:
-
-            logs.append(f"{name}: OK")
-
-        else:
-
-            logs.append(f"{name}: NG")
-
-    dashboard.show(
-
-        result,
-
-        recipe_manager.recipe_name(),
-
-        fps,
-
-        inspection_time,
-
-        logs
-
-    )
-
-    # -----------------------------------------
     # Debug
     # -----------------------------------------
 
@@ -274,7 +266,7 @@ while running:
 
         roi_manager.save(
 
-            ROI_FILE
+            band.roi
 
         )
 
@@ -286,12 +278,12 @@ while running:
 
            reference_manager.save(
 
-               REFERENCE_FILE,
+               band,
 
                result["reference"]
            )
 
-           reference_image= reference_manager.load(
+           reference_image = reference_manager.load(
                band
            )
 
@@ -351,8 +343,6 @@ while running:
 # -------------------------------------------------
 
 cap.release()
-
-dashboard.close()
 
 debug_view.close()
 
