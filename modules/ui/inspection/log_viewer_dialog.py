@@ -7,6 +7,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
+    QTabWidget,
+    QWidget,
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
@@ -49,7 +51,11 @@ class LogViewerDialog(QDialog):
 
         layout.addLayout(top_row)
 
-        content_row = QHBoxLayout()
+        self.tabs = QTabWidget()
+        layout.addWidget(self.tabs)
+
+        records_page = QWidget()
+        content_row = QHBoxLayout(records_page)
 
         self.table = QTableWidget()
         self.table.setColumnCount(len(self.COLUMNS))
@@ -86,7 +92,49 @@ class LogViewerDialog(QDialog):
 
         content_row.addLayout(right_col, stretch=1)
 
-        layout.addLayout(content_row)
+        self.tabs.addTab(records_page, "Kayıtlar")
+
+        # ---------- İstatistikler Sekmesi ----------
+
+        stats_page = QWidget()
+        stats_layout = QVBoxLayout(stats_page)
+
+        self.summary_label = QLabel("")
+        stats_layout.addWidget(self.summary_label)
+
+        stats_layout.addWidget(QLabel("Model Bazında:"))
+
+        self.model_stats_table = QTableWidget()
+        self.model_stats_table.setColumnCount(4)
+        self.model_stats_table.setHorizontalHeaderLabels(
+            ["Model", "OK", "NG", "NG Oranı"]
+        )
+        self.model_stats_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+        self.model_stats_table.verticalHeader().setVisible(False)
+        self.model_stats_table.setEditTriggers(
+            QTableWidget.NoEditTriggers
+        )
+        stats_layout.addWidget(self.model_stats_table)
+
+        stats_layout.addWidget(QLabel("ROI Bazında (en çok NG üstte):"))
+
+        self.roi_stats_table = QTableWidget()
+        self.roi_stats_table.setColumnCount(4)
+        self.roi_stats_table.setHorizontalHeaderLabels(
+            ["ROI", "OK", "NG", "NG Oranı"]
+        )
+        self.roi_stats_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+        self.roi_stats_table.verticalHeader().setVisible(False)
+        self.roi_stats_table.setEditTriggers(
+            QTableWidget.NoEditTriggers
+        )
+        stats_layout.addWidget(self.roi_stats_table)
+
+        self.tabs.addTab(stats_page, "İstatistikler")
 
         self.reload()
 
@@ -127,6 +175,69 @@ class LogViewerDialog(QDialog):
         self.image_label.clear()
         self.image_label.setText("Fotoğraf yok")
         self.detail_label.setText("")
+
+        self._reload_stats()
+
+    # -------------------------------------------------
+    # İstatistikleri Yeniden Yükle
+    # -------------------------------------------------
+
+    def _reload_stats(self):
+
+        stats = self.inspection_logger.compute_stats()
+
+        total = stats["total"]
+        ok_count = stats["ok_count"]
+        ng_count = stats["ng_count"]
+
+        ng_ratio = (ng_count / total * 100) if total else 0.0
+
+        self.summary_label.setText(
+            f"Toplam: {total}  |  OK: {ok_count}  |  "
+            f"NG: {ng_count}  |  NG Oranı: %{ng_ratio:.1f}"
+        )
+
+        self._fill_stats_table(self.model_stats_table, stats["by_model"])
+
+        roi_items = sorted(
+            stats["by_roi"].items(),
+            key=lambda item: item[1]["ng"],
+            reverse=True
+        )
+
+        self._fill_stats_table(
+            self.roi_stats_table,
+            dict(roi_items),
+            preserve_order=True
+        )
+
+    # -------------------------------------------------
+
+    def _fill_stats_table(self, table, data, preserve_order=False):
+
+        keys = data.keys() if preserve_order else sorted(data.keys())
+
+        table.setRowCount(len(data))
+
+        for row_index, key in enumerate(keys):
+
+            counts = data[key]
+
+            ok = counts["ok"]
+            ng = counts["ng"]
+            total = ok + ng
+
+            ratio = (ng / total * 100) if total else 0.0
+
+            values = [key, str(ok), str(ng), f"%{ratio:.1f}"]
+
+            for column_index, value in enumerate(values):
+
+                table.setItem(
+                    row_index,
+                    column_index,
+                    QTableWidgetItem(value)
+                )
 
     # -------------------------------------------------
 

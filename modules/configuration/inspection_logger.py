@@ -152,6 +152,73 @@ class InspectionLogger:
         return [dict(row) for row in rows]
 
     # -------------------------------------------------
+    # İstatistikler
+    # -------------------------------------------------
+
+    def compute_stats(self) -> dict:
+
+        conn = sqlite3.connect(self.db_path)
+
+        try:
+
+            conn.row_factory = sqlite3.Row
+
+            rows = conn.execute(
+                "SELECT model_name, overall_result, roi_results "
+                "FROM inspections"
+            ).fetchall()
+
+        finally:
+
+            conn.close()
+
+        total = len(rows)
+        ok_count = 0
+        ng_count = 0
+        by_model = {}
+        by_roi = {}
+
+        for row in rows:
+
+            is_ok = row["overall_result"] == "OK"
+
+            if is_ok:
+                ok_count += 1
+            else:
+                ng_count += 1
+
+            model_name = row["model_name"] or "-"
+
+            model_stats = by_model.setdefault(
+                model_name,
+                {"ok": 0, "ng": 0}
+            )
+
+            model_stats["ok" if is_ok else "ng"] += 1
+
+            try:
+                roi_results = json.loads(row["roi_results"])
+            except Exception:
+                roi_results = {}
+
+            for roi_name, data in roi_results.items():
+
+                roi_stats = by_roi.setdefault(
+                    roi_name,
+                    {"ok": 0, "ng": 0}
+                )
+
+                roi_stats["ok" if data.get("ok") else "ng"] += 1
+
+        return {
+            "total": total,
+            "ok_count": ok_count,
+            "ng_count": ng_count,
+            "by_model": by_model,
+            "by_roi": by_roi
+        }
+
+    # -------------------------------------------------
     # Geçmişi Temizle
     # -------------------------------------------------
 
