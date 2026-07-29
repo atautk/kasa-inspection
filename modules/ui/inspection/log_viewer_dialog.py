@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QVBoxLayout,
     QHBoxLayout,
+    QSplitter,
     QTabWidget,
     QWidget,
     QTableWidget,
@@ -15,15 +16,34 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QFrame,
-    QSizePolicy
+    QSizePolicy,
+    QMessageBox
 )
 from PySide6.QtGui import QImage, QPixmap, QColor
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
+
+from .image_preview_dialog import ImagePreviewDialog
+from ..window_utils import restore_or_center, save_geometry
+
+SETTINGS_KEY = "log_viewer"
+
+
+class ClickableImageLabel(QLabel):
+
+    doubleClicked = Signal()
+
+    def mouseDoubleClickEvent(self, event):
+
+        self.doubleClicked.emit()
+
+        super().mouseDoubleClickEvent(event)
 
 
 class LogViewerDialog(QDialog):
 
-    COLUMNS = ["ID", "Zaman", "Model", "Sonuç"]
+    COLUMNS = ["ID", "Zaman", "Model", "Sonuç", "İncelendi"]
+
+    ROI_DETAIL_COLUMNS = ["ROI", "Sonuç", "Tespit Edilen", "Beklenen"]
 
     def __init__(self, inspection_logger, band_name, parent=None):
 
@@ -32,8 +52,13 @@ class LogViewerDialog(QDialog):
         self.inspection_logger = inspection_logger
         self.rows = []
 
+        self.current_record = None
+        self.current_roi_names = []
+        self.current_image_path = None
+        self.image_dialogs = []
+
         self.setWindowTitle(f"Inspection Geçmişi - {band_name}")
-        self.resize(900, 500)
+        restore_or_center(self, SETTINGS_KEY, 1300, 800)
 
         layout = QVBoxLayout(self)
 
@@ -55,7 +80,10 @@ class LogViewerDialog(QDialog):
         layout.addWidget(self.tabs)
 
         records_page = QWidget()
-        content_row = QHBoxLayout(records_page)
+        records_layout = QVBoxLayout(records_page)
+
+        splitter = QSplitter(Qt.Horizontal)
+        records_layout.addWidget(splitter)
 
         self.table = QTableWidget()
         self.table.setColumnCount(len(self.COLUMNS))
@@ -69,14 +97,17 @@ class LogViewerDialog(QDialog):
         self.table.itemSelectionChanged.connect(
             self._on_selection_changed
         )
-        content_row.addWidget(self.table, stretch=2)
+        splitter.addWidget(self.table)
 
-        right_col = QVBoxLayout()
+        right_panel = QWidget()
+        right_col = QVBoxLayout(right_panel)
 
-        self.image_label = QLabel("Fotoğraf yok")
+        right_col.addWidget(QLabel("Fotoğraf (çift tıkla / büyüt ile aç):"))
+
+        self.image_label = ClickableImageLabel("Fotoğraf yok")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setFrameShape(QFrame.Box)
-        self.image_label.setMinimumSize(320, 240)
+        self.image_label.setMinimumSize(420, 320)
         self.image_label.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Expanding
@@ -84,13 +115,57 @@ class LogViewerDialog(QDialog):
         self.image_label.setStyleSheet(
             "background-color: black; color: white;"
         )
-        right_col.addWidget(self.image_label)
+        self.image_label.doubleClicked.connect(self._on_enlarge_image)
+        right_col.addWidget(self.image_label, stretch=2)
 
-        self.detail_label = QLabel("")
-        self.detail_label.setWordWrap(True)
-        right_col.addWidget(self.detail_label)
+        self.enlarge_image_button = QPushButton("Fotoğrafı Büyüt")
+        self.enlarge_image_button.setEnabled(False)
+        self.enlarge_image_button.clicked.connect(self._on_enlarge_image)
+        right_col.addWidget(self.enlarge_image_button)
 
-        content_row.addLayout(right_col, stretch=1)
+        right_col.addWidget(QLabel("ROI Detayları:"))
+
+        self.roi_detail_table = QTableWidget()
+        self.roi_detail_table.setColumnCount(len(self.ROI_DETAIL_COLUMNS))
+        self.roi_detail_table.setHorizontalHeaderLabels(
+            self.ROI_DETAIL_COLUMNS
+        )
+        self.roi_detail_table.horizontalHeader().setSectionResizeMode(
+            QHeaderView.Stretch
+        )
+        self.roi_detail_table.verticalHeader().setVisible(False)
+        self.roi_detail_table.setEditTriggers(
+            QTableWidget.NoEditTriggers
+        )
+        self.roi_detail_table.setSelectionBehavior(
+            QTableWidget.SelectRows
+        )
+        self.roi_detail_table.itemSelectionChanged.connect(
+            self._on_roi_selection_changed
+        )
+        right_col.addWidget(self.roi_detail_table, stretch=1)
+
+        button_row = QHBoxLayout()
+
+        self.correct_roi_button = QPushButton(
+            "Seçili ROI'yi Düzelt (Yanlış Tespit, OK Yap)"
+        )
+        self.correct_roi_button.setEnabled(False)
+        self.correct_roi_button.clicked.connect(
+            self._on_correct_roi_clicked
+        )
+        button_row.addWidget(self.correct_roi_button)
+
+        self.mark_ok_button = QPushButton("Seçili Kaydı İncelendi/OK Yap")
+        self.mark_ok_button.setEnabled(False)
+        self.mark_ok_button.clicked.connect(self._on_mark_ok_clicked)
+        button_row.addWidget(self.mark_ok_button)
+
+        right_col.addLayout(button_row)
+
+        splitter.addWidget(right_panel)
+        splitter.setStretchFactor(0, 2)
+        splitter.setStretchFactor(1, 3)
 
         self.tabs.addTab(records_page, "Kayıtlar")
 
@@ -139,6 +214,14 @@ class LogViewerDialog(QDialog):
         self.reload()
 
     # -------------------------------------------------
+
+    def closeEvent(self, event):
+
+        save_geometry(self, SETTINGS_KEY)
+
+        super().closeEvent(event)
+
+    # -------------------------------------------------
     # Yeniden Yükle
     # -------------------------------------------------
 
@@ -150,15 +233,28 @@ class LogViewerDialog(QDialog):
 
         for row_index, row in enumerate(self.rows):
 
+            reviewed = bool(row.get("reviewed"))
             ok = row["overall_result"] == "OK"
 
-            color = QColor(200, 255, 200) if ok else QColor(255, 200, 200)
+            if reviewed:
+                color = QColor(255, 235, 180)
+            elif ok:
+                color = QColor(200, 255, 200)
+            else:
+                color = QColor(255, 200, 200)
+
+            reviewed_text = (
+                f"Evet (orijinal: {row['original_result']})"
+                if reviewed
+                else "-"
+            )
 
             values = [
                 str(row["id"]),
                 self._format_timestamp(row["timestamp"]),
                 row["model_name"] or "-",
-                row["overall_result"]
+                row["overall_result"],
+                reviewed_text
             ]
 
             for column_index, value in enumerate(values):
@@ -174,7 +270,13 @@ class LogViewerDialog(QDialog):
 
         self.image_label.clear()
         self.image_label.setText("Fotoğraf yok")
-        self.detail_label.setText("")
+        self.current_image_path = None
+        self.enlarge_image_button.setEnabled(False)
+        self.roi_detail_table.setRowCount(0)
+        self.current_record = None
+        self.current_roi_names = []
+        self.mark_ok_button.setEnabled(False)
+        self.correct_roi_button.setEnabled(False)
 
         self._reload_stats()
 
@@ -269,29 +371,170 @@ class LogViewerDialog(QDialog):
         if row_index < 0 or row_index >= len(self.rows):
             return
 
-        self._show_detail(self.rows[row_index])
+        row = self.rows[row_index]
+
+        self._show_detail(row)
+
+        can_mark = (
+            row["overall_result"] == "NG"
+            and not row.get("reviewed")
+        )
+
+        self.mark_ok_button.setEnabled(can_mark)
+
+    # -------------------------------------------------
+    # NG Kaydını İncelendi/OK Yap
+    # -------------------------------------------------
+
+    def _on_mark_ok_clicked(self):
+
+        selected = self.table.selectedItems()
+
+        if not selected:
+            return
+
+        row_index = selected[0].row()
+
+        if row_index < 0 or row_index >= len(self.rows):
+            return
+
+        row = self.rows[row_index]
+
+        answer = QMessageBox.question(
+            self,
+            "Emin misiniz?",
+            f"{row['id']} numaralı NG kaydı incelendi olarak "
+            f"işaretlenip OK'e çevrilecek. Orijinal NG sonucu "
+            f"(ileride model eğitimi için) saklanacak. Devam "
+            f"edilsin mi?"
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        self.inspection_logger.mark_reviewed_ok(row["id"])
+
+        self.reload()
+
+    # -------------------------------------------------
+    # ROI Seçimi ve Düzeltme
+    # -------------------------------------------------
+
+    def _on_roi_selection_changed(self):
+
+        selected = self.roi_detail_table.selectedItems()
+
+        if not selected or self.current_record is None:
+            self.correct_roi_button.setEnabled(False)
+            return
+
+        row_index = selected[0].row()
+
+        if row_index < 0 or row_index >= len(self.current_roi_names):
+            self.correct_roi_button.setEnabled(False)
+            return
+
+        roi_name = self.current_roi_names[row_index]
+
+        try:
+            roi_results = json.loads(self.current_record["roi_results"])
+        except Exception:
+            roi_results = {}
+
+        roi_data = roi_results.get(roi_name, {})
+
+        can_correct = (
+            not roi_data.get("ok", True)
+            and not roi_data.get("reviewed")
+        )
+
+        self.correct_roi_button.setEnabled(can_correct)
+
+    def _on_correct_roi_clicked(self):
+
+        if self.current_record is None:
+            return
+
+        selected = self.roi_detail_table.selectedItems()
+
+        if not selected:
+            return
+
+        row_index = selected[0].row()
+
+        if row_index < 0 or row_index >= len(self.current_roi_names):
+            return
+
+        roi_name = self.current_roi_names[row_index]
+
+        answer = QMessageBox.question(
+            self,
+            "Emin misiniz?",
+            f"{roi_name} yanlış tespit edilmiş (örn. dolu bir göz "
+            f"boş görülmüş) kabul edilip OK olarak düzeltilecek. "
+            f"Orijinal tespit (model eğitimi için) saklanacak. "
+            f"Devam edilsin mi?"
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        self.inspection_logger.correct_roi(
+            self.current_record["id"],
+            roi_name,
+            True
+        )
+
+        self.reload()
 
     # -------------------------------------------------
 
     def _show_detail(self, row):
+
+        self.current_record = row
 
         try:
             roi_results = json.loads(row["roi_results"])
         except Exception:
             roi_results = {}
 
-        lines = []
+        self.current_roi_names = sorted(roi_results.keys())
 
-        for name, data in sorted(roi_results.items()):
+        self.roi_detail_table.setRowCount(len(self.current_roi_names))
 
-            status = "OK" if data.get("ok") else "NG"
+        for row_index, name in enumerate(self.current_roi_names):
 
-            lines.append(
-                f"{name}: {status} "
-                f"({data.get('state')}, beklenen {data.get('expected')})"
+            data = roi_results[name]
+
+            ok = bool(data.get("ok"))
+
+            reviewed = bool(data.get("reviewed"))
+
+            color = (
+                QColor(255, 235, 180)
+                if reviewed
+                else QColor(200, 255, 200) if ok else QColor(255, 200, 200)
             )
 
-        self.detail_label.setText("\n".join(lines))
+            values = [
+                name,
+                "OK" if ok else "NG",
+                str(data.get("state")),
+                str(data.get("expected"))
+            ]
+
+            for column_index, value in enumerate(values):
+
+                item = QTableWidgetItem(value)
+                item.setBackground(color)
+
+                self.roi_detail_table.setItem(
+                    row_index,
+                    column_index,
+                    item
+                )
+
+        self.correct_roi_button.setEnabled(False)
 
         self._show_image(row.get("image_path"))
 
@@ -299,10 +542,13 @@ class LogViewerDialog(QDialog):
 
     def _show_image(self, image_path):
 
+        self.current_image_path = image_path
+
         if not image_path:
 
             self.image_label.clear()
             self.image_label.setText("Fotoğraf yok")
+            self.enlarge_image_button.setEnabled(False)
             return
 
         image = cv2.imread(image_path)
@@ -311,7 +557,10 @@ class LogViewerDialog(QDialog):
 
             self.image_label.clear()
             self.image_label.setText("Fotoğraf okunamadı")
+            self.enlarge_image_button.setEnabled(False)
             return
+
+        self.enlarge_image_button.setEnabled(True)
 
         height, width = image.shape[:2]
 
@@ -333,3 +582,34 @@ class LogViewerDialog(QDialog):
         )
 
         self.image_label.setPixmap(pixmap)
+
+    # -------------------------------------------------
+    # Fotoğrafı Büyüt
+    # -------------------------------------------------
+
+    def _on_enlarge_image(self):
+
+        if not self.current_image_path:
+            return
+
+        record_id = (
+            self.current_record["id"]
+            if self.current_record is not None
+            else "-"
+        )
+
+        dialog = ImagePreviewDialog(
+            self.current_image_path,
+            title=f"Fotoğraf - Kayıt #{record_id}",
+            parent=self
+        )
+
+        self.image_dialogs.append(dialog)
+
+        dialog.finished.connect(
+            lambda _: self.image_dialogs.remove(dialog)
+            if dialog in self.image_dialogs
+            else None
+        )
+
+        dialog.show()

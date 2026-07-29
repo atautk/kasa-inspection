@@ -50,6 +50,19 @@ class InspectionLogger:
                     "ALTER TABLE inspections ADD COLUMN image_path TEXT"
                 )
 
+            if "reviewed" not in columns:
+
+                conn.execute(
+                    "ALTER TABLE inspections "
+                    "ADD COLUMN reviewed INTEGER NOT NULL DEFAULT 0"
+                )
+
+            if "original_result" not in columns:
+
+                conn.execute(
+                    "ALTER TABLE inspections ADD COLUMN original_result TEXT"
+                )
+
             conn.commit()
 
         finally:
@@ -59,8 +72,21 @@ class InspectionLogger:
     # -------------------------------------------------
     # Sonuç Değiştiyse Logla
     # -------------------------------------------------
+    #
+    # ROI'ler kontrol edilir; hepsi doğruysa (ok) genel durum OK,
+    # değilse NG olur. Loglama sadece genel OK/NG durumu bir
+    # önceki kareye göre değiştiğinde tetiklenir.
 
-    def log_if_changed(
+    def should_log(self, results: dict) -> bool:
+
+        if not results:
+            return False
+
+        overall_result = self._compute_overall_result(results)
+
+        return overall_result != self.last_overall_result
+
+    def log(
         self,
         results: dict,
         model_name: str | None,
@@ -70,20 +96,35 @@ class InspectionLogger:
         if not results:
             return False
 
-        overall_result = (
-            "OK"
-            if all(data["ok"] for data in results.values())
-            else "NG"
-        )
-
-        if overall_result == self.last_overall_result:
-            return False
+        overall_result = self._compute_overall_result(results)
 
         self.last_overall_result = overall_result
 
         self._insert(overall_result, model_name, results, image_path)
 
         return True
+
+    def log_if_changed(
+        self,
+        results: dict,
+        model_name: str | None,
+        image_path: str | None = None
+    ) -> bool:
+
+        if not self.should_log(results):
+            return False
+
+        return self.log(results, model_name, image_path)
+
+    # -------------------------------------------------
+
+    def _compute_overall_result(self, results: dict) -> str:
+
+        return (
+            "OK"
+            if all(data["ok"] for data in results.values())
+            else "NG"
+        )
 
     # -------------------------------------------------
 
@@ -217,6 +258,128 @@ class InspectionLogger:
             "by_model": by_model,
             "by_roi": by_roi
         }
+
+    # -------------------------------------------------
+    # NG Kaydını İncelenmiş Olarak OK'e Çevir
+    # -------------------------------------------------
+
+    def mark_reviewed_ok(self, record_id: int) -> bool:
+
+        conn = sqlite3.connect(self.db_path)
+
+        try:
+
+            row = conn.execute(
+                "SELECT overall_result, original_result "
+                "FROM inspections WHERE id = ?",
+                (record_id,)
+            ).fetchone()
+
+            if row is None:
+                return False
+
+            current_result, original_result = row
+
+            if original_result is None:
+                original_result = current_result
+
+            conn.execute(
+                """
+                UPDATE inspections
+                SET overall_result = 'OK',
+                    reviewed = 1,
+                    original_result = ?
+                WHERE id = ?
+                """,
+                (original_result, record_id)
+            )
+
+            conn.commit()
+
+        finally:
+
+            conn.close()
+
+        return True
+
+    # -------------------------------------------------
+    # Tek Bir ROI'yi Düzelt
+    # -------------------------------------------------
+    #
+    # Belirli bir ROI yanlış tespit edilmiş olabilir (örn. dolu
+    # bir göz boş görülmüş). Bu ROI'nin "ok" değeri düzeltilir,
+    # orijinal tespit (model eğitimi için) roi_results içinde
+    # "original_ok" olarak saklanır, ve genel sonuç güncel ROI
+    # durumlarına göre yeniden hesaplanır.
+
+    def correct_roi(
+        self,
+        record_id: int,
+        roi_name: str,
+        corrected_ok: bool = True
+    ) -> bool:
+
+        conn = sqlite3.connect(self.db_path)
+
+        try:
+
+            row = conn.execute(
+                "SELECT roi_results, overall_result, original_result "
+                "FROM inspections WHERE id = ?",
+                (record_id,)
+            ).fetchone()
+
+            if row is None:
+                return False
+
+            roi_results_json, current_result, original_result = row
+
+            roi_results = json.loads(roi_results_json)
+
+            if roi_name not in roi_results:
+                return False
+
+            roi_data = roi_results[roi_name]
+
+            if "original_ok" not in roi_data:
+                roi_data["original_ok"] = roi_data["ok"]
+
+            roi_data["ok"] = corrected_ok
+            roi_data["reviewed"] = True
+
+            new_overall_result = (
+                "OK"
+                if all(data["ok"] for data in roi_results.values())
+                else "NG"
+            )
+
+            if original_result is None:
+                original_result = current_result
+
+            conn.execute(
+                """
+                UPDATE inspections
+                SET roi_results = ?,
+                    overall_result = ?,
+                    reviewed = 1,
+                    original_result = ?
+                WHERE id = ?
+                """,
+                (
+                    json.dumps(roi_results, ensure_ascii=False),
+                    new_overall_result,
+                    original_result,
+                    record_id
+                )
+            )
+
+            conn.commit()
+
+        finally:
+
+            conn.close()
+
+        return True
 
     # -------------------------------------------------
     # Geçmişi Temizle

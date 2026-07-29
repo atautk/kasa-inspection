@@ -8,6 +8,10 @@ from .reference_page import ReferencePage
 from .roi_page import ROIPage
 from .model_page import ModelPage
 
+from ..window_utils import restore_or_center, save_geometry
+
+SETTINGS_KEY = "configurator_main"
+
 
 class MainWindow(QMainWindow):
 
@@ -17,7 +21,7 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("KASA CONFIGURATOR")
 
-        self.resize(1400, 900)
+        restore_or_center(self, SETTINGS_KEY, 1400, 900)
 
         self.tabs = QTabWidget()
 
@@ -36,3 +40,11 @@ class MainWindow(QMainWindow):
         self.tabs.setTabEnabled(3, False)
 
         self.setCentralWidget(self.tabs)
+
+    # -------------------------------------------------
+
+    def closeEvent(self, event):
+
+        save_geometry(self, SETTINGS_KEY)
+
+        super().closeEvent(event)

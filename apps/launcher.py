@@ -2,6 +2,10 @@ import sys
 import subprocess
 from pathlib import Path
 
+APPS_DIR = Path(__file__).resolve().parent
+ROOT = APPS_DIR.parent
+sys.path.insert(0, str(ROOT))
+
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
@@ -11,7 +15,9 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-APPS_DIR = Path(__file__).resolve().parent
+from modules.ui.window_utils import restore_or_center, save_geometry
+
+SETTINGS_KEY = "launcher"
 
 
 class LauncherWindow(QWidget):
@@ -22,7 +28,7 @@ class LauncherWindow(QWidget):
 
         self.setWindowTitle("KASA INSPECTION")
 
-        self.resize(360, 220)
+        restore_or_center(self, SETTINGS_KEY, 360, 220)
 
         layout = QVBoxLayout(self)
 
@@ -57,6 +63,14 @@ class LauncherWindow(QWidget):
         subprocess.Popen(
             [sys.executable, str(APPS_DIR / script_name)]
         )
+
+    # -------------------------------------------------
+
+    def closeEvent(self, event):
+
+        save_geometry(self, SETTINGS_KEY)
+
+        super().closeEvent(event)
 
 
 def main():

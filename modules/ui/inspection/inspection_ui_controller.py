@@ -432,7 +432,11 @@ class InspectionUIController:
 
         self.page.set_results(result["results"])
 
-        if self.inspection_logger is not None and result["results"]:
+        if (
+            self.inspection_logger is not None
+            and result["results"]
+            and self.inspection_logger.should_log(result["results"])
+        ):
 
             model_name = (
                 self.current_model.name
@@ -448,19 +452,14 @@ class InspectionUIController:
 
             image_path = None
 
-            is_new_ng = (
-                overall_result == "NG"
-                and overall_result != self.inspection_logger.last_overall_result
-            )
-
-            if is_new_ng:
+            if overall_result == "NG":
 
                 image_path = self.ng_capture_manager.save(
                     self.current_band,
                     display
                 )
 
-            self.inspection_logger.log_if_changed(
+            self.inspection_logger.log(
                 result["results"],
                 model_name,
                 image_path
