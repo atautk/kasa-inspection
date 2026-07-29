@@ -13,4 +13,5 @@ class Band:
     models: Path
 
     camera: int = 0
+    threshold: float = 3.0
     version: str = "1.0"

@@ -159,6 +159,11 @@ class InspectionUIController:
 
     def _build_inspection_controller(self):
 
+        decision_engine = DecisionEngine()
+
+        if self.current_band is not None:
+            decision_engine.set_threshold(self.current_band.threshold)
+
         self.inspection_controller = InspectionController(
             ArucoDetector(),
             LocalizationEngine(),
@@ -166,7 +171,7 @@ class InspectionUIController:
             InspectionEngine(),
             self.roi_manager,
             self.recipe_manager,
-            DecisionEngine()
+            decision_engine
         )
 
     # -------------------------------------------------

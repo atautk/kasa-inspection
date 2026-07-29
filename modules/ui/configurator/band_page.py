@@ -1,9 +1,11 @@
 from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
+    QHBoxLayout,
     QListWidget,
     QPushButton,
-    QLabel
+    QLabel,
+    QDoubleSpinBox
 )
 
 
@@ -29,3 +31,39 @@ class BandPage(QWidget):
 
         self.validate_button = QPushButton("Doğrula")
         layout.addWidget(self.validate_button)
+
+        # ---------- Eşik Ayarı ----------
+
+        threshold_row = QHBoxLayout()
+
+        threshold_row.addWidget(QLabel("Değişim Eşiği (%):"))
+
+        self.threshold_spinbox = QDoubleSpinBox()
+        self.threshold_spinbox.setRange(0.0, 100.0)
+        self.threshold_spinbox.setDecimals(1)
+        self.threshold_spinbox.setSingleStep(0.1)
+        self.threshold_spinbox.setEnabled(False)
+        threshold_row.addWidget(self.threshold_spinbox)
+
+        self.save_threshold_button = QPushButton("Eşiği Kaydet")
+        self.save_threshold_button.setEnabled(False)
+        threshold_row.addWidget(self.save_threshold_button)
+
+        layout.addLayout(threshold_row)
+
+    # -------------------------------------------------
+    # Eşik Kontrolleri
+    # -------------------------------------------------
+
+    def set_threshold(self, value: float):
+
+        self.threshold_spinbox.setValue(value)
+
+    def get_threshold(self) -> float:
+
+        return self.threshold_spinbox.value()
+
+    def enable_threshold_controls(self, enabled: bool):
+
+        self.threshold_spinbox.setEnabled(enabled)
+        self.save_threshold_button.setEnabled(enabled)

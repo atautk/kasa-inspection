@@ -83,6 +83,10 @@ class ConfiguratorController:
             self.validate_band
         )
 
+        band_page.save_threshold_button.clicked.connect(
+            self.save_threshold
+        )
+
         reference_page = self.window.reference_page
 
         reference_page.camera_button.clicked.connect(
@@ -224,6 +228,9 @@ class ConfiguratorController:
         # Models sekmesi şimdilik serbest.
         self.window.tabs.setTabEnabled(3, True)
 
+        page.set_threshold(self.current_band.threshold)
+        page.enable_threshold_controls(True)
+
         self.load_reference_tab()
 
         QMessageBox.information(
@@ -233,6 +240,29 @@ class ConfiguratorController:
             "Başarılı",
 
             f"{self.current_band.name} açıldı."
+
+        )
+
+    # -------------------------------------------------
+
+    def save_threshold(self):
+
+        if self.current_band is None:
+            return
+
+        page = self.window.band_page
+
+        self.current_band.threshold = page.get_threshold()
+
+        self.band_manager.save_band(self.current_band)
+
+        QMessageBox.information(
+
+            self.window,
+
+            "Başarılı",
+
+            f"Eşik değeri %{self.current_band.threshold:.1f} olarak kaydedildi."
 
         )
 

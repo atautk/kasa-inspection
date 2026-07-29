@@ -71,6 +71,7 @@ class BandManager:
             "id": band_id,
             "name": name,
             "camera": camera,
+            "threshold": 3.0,
             "version": "1.0"
 
         }
@@ -128,9 +129,43 @@ class BandManager:
 
             camera=data.get("camera", 0),
 
+            threshold=data.get("threshold", 3.0),
+
             version=data.get("version", "1.0")
 
         )
+
+    # -------------------------------------------------
+    # Bant Kaydet
+    # -------------------------------------------------
+
+    def save_band(
+        self,
+        band: Band
+    ):
+
+        band_json = {
+
+            "id": band.id,
+            "name": band.name,
+            "camera": band.camera,
+            "threshold": band.threshold,
+            "version": band.version
+
+        }
+
+        with open(
+            band.root / "band.json",
+            "w",
+            encoding="utf-8"
+        ) as f:
+
+            json.dump(
+                band_json,
+                f,
+                indent=4,
+                ensure_ascii=False
+            )
 
     # -------------------------------------------------
     # Bant Sil
