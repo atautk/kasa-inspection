@@ -1,0 +1,7 @@
+{
+    "id": "band_01",
+    "name": "band 1",
+    "camera": 0,
+    "threshold": 2.5,
+    "version": "1.0"
+}
