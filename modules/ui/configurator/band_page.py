@@ -26,3 +26,6 @@ class BandPage(QWidget):
 
         self.open_button = QPushButton("Bandı Aç")
         layout.addWidget(self.open_button)
+
+        self.validate_button = QPushButton("Doğrula")
+        layout.addWidget(self.validate_button)

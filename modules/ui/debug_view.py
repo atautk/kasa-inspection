@@ -1,26 +1,29 @@
 import cv2
+import numpy as np
 
 
 class DebugView:
+
+    WINDOW_NAME = "Debug"
+
+    THUMB_WIDTH = 220
+    THUMB_HEIGHT = 160
+
+    TITLE_HEIGHT = 20
+
+    LABELS = [
+        ("reference", "Reference"),
+        ("current", "Current"),
+        ("difference", "Difference"),
+        ("binary", "Binary")
+    ]
 
     def __init__(self):
 
         self.enabled = True
 
-        self.windows = [
-
-            "Reference Crop",
-
-            "Current Crop",
-
-            "Difference",
-
-            "Binary"
-
-        ]
-
     # -------------------------------------------------
-    # Debug Pencerelerini Göster
+    # Debug Penceresini Göster
     # -------------------------------------------------
 
     def show(self, debug):
@@ -28,45 +31,105 @@ class DebugView:
         if not self.enabled:
             return
 
-        if debug is None:
+        if not debug:
             return
 
-        images = {
+        rois = sorted(debug.keys())
 
-            "Reference Crop": debug["reference"],
+        canvas = np.zeros(
+            (
+                self.THUMB_HEIGHT * len(rois),
+                self.THUMB_WIDTH * len(self.LABELS),
+                3
+            ),
+            dtype=np.uint8
+        )
 
-            "Current Crop": debug["current"],
+        for row, roi_name in enumerate(rois):
 
-            "Difference": debug["difference"],
+            compare = debug[roi_name]
 
-            "Binary": debug["binary"]
+            for col, (key, label) in enumerate(self.LABELS):
 
-        }
-
-        for window, image in images.items():
-
-            if image is not None:
-
-                cv2.imshow(
-                    window,
-                    image
+                thumb = self._build_thumbnail(
+                    compare.get(key),
+                    f"{roi_name} - {label}"
                 )
 
+                y = row * self.THUMB_HEIGHT
+                x = col * self.THUMB_WIDTH
+
+                canvas[
+                    y:y + self.THUMB_HEIGHT,
+                    x:x + self.THUMB_WIDTH
+                ] = thumb
+
+        cv2.imshow(self.WINDOW_NAME, canvas)
+
     # -------------------------------------------------
-    # Debug Pencerelerini Kapat
+    # Küçük Resim Oluştur
+    # -------------------------------------------------
+
+    def _build_thumbnail(self, image, title):
+
+        thumb = np.zeros(
+            (self.THUMB_HEIGHT, self.THUMB_WIDTH, 3),
+            dtype=np.uint8
+        )
+
+        if image is not None:
+
+            if len(image.shape) == 2:
+                image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+
+            resized = cv2.resize(
+                image,
+                (self.THUMB_WIDTH, self.THUMB_HEIGHT - self.TITLE_HEIGHT)
+            )
+
+            thumb[self.TITLE_HEIGHT:, :] = resized
+
+        cv2.rectangle(
+            thumb,
+            (0, 0),
+            (self.THUMB_WIDTH, self.TITLE_HEIGHT),
+            (40, 40, 40),
+            -1
+        )
+
+        cv2.putText(
+            thumb,
+            title,
+            (4, self.TITLE_HEIGHT - 5),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.4,
+            (255, 255, 255),
+            1
+        )
+
+        cv2.rectangle(
+            thumb,
+            (0, 0),
+            (self.THUMB_WIDTH - 1, self.THUMB_HEIGHT - 1),
+            (90, 90, 90),
+            1
+        )
+
+        return thumb
+
+    # -------------------------------------------------
+    # Debug Penceresini Kapat
     # -------------------------------------------------
 
     def close(self):
 
-        for window in self.windows:
+        try:
 
-            try:
+            cv2.destroyWindow(self.WINDOW_NAME)
 
-                cv2.destroyWindow(window)
+        except cv2.error:
 
-            except cv2.error:
-
-                pass
+            pass
 
     # -------------------------------------------------
     # Enable

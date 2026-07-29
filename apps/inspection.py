@@ -16,7 +16,7 @@ def main():
     window = InspectionWindow()
 
     from modules.ui.inspection.inspection_ui_controller import InspectionUIController
-    controller = InspectionUIController(window)
+    controller = InspectionUIController(window, root=ROOT)
 
     window.show()
 

@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 from PySide6.QtWidgets import (
     QInputDialog,
@@ -10,6 +11,10 @@ from PySide6.QtCore import Qt, QTimer
 from modules.configuration.band_manager import BandManager
 from modules.configuration.reference_manager import ReferenceManager
 from modules.configuration.model_manager import ModelManager
+from modules.configuration.configuration_validator import ConfigurationValidator
+
+# modules/ui/configurator/configurator_controller.py -> proje kökü
+ROOT = Path(__file__).resolve().parents[3]
 
 from modules.core.camera import Camera
 from modules.core.aruco_detector import ArucoDetector
@@ -24,9 +29,10 @@ class ConfiguratorController:
 
         self.window = window
 
-        self.band_manager = BandManager()
+        self.band_manager = BandManager(root=ROOT / "configuration")
         self.reference_manager = ReferenceManager()
         self.model_manager = ModelManager()
+        self.validator = ConfigurationValidator()
 
         self.current_band = None
         self.current_model = None
@@ -71,6 +77,10 @@ class ConfiguratorController:
 
         band_page.open_button.clicked.connect(
             self.open_band
+        )
+
+        band_page.validate_button.clicked.connect(
+            self.validate_band
         )
 
         reference_page = self.window.reference_page
@@ -225,6 +235,64 @@ class ConfiguratorController:
             f"{self.current_band.name} açıldı."
 
         )
+
+    # -------------------------------------------------
+
+    def validate_band(self):
+
+        page = self.window.band_page
+
+        item = page.band_list.currentItem()
+
+        if item is None:
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Uyarı",
+
+                "Lütfen doğrulanacak bir band seçin."
+
+            )
+
+            return
+
+        band_id = item.data(Qt.UserRole)
+
+        band = self.band_manager.load_band(band_id)
+
+        result = self.validator.validate(band)
+
+        if result["valid"]:
+
+            QMessageBox.information(
+
+                self.window,
+
+                "Doğrulama Başarılı",
+
+                f"{band.name} yapılandırması eksiksiz."
+
+            )
+
+        else:
+
+            message = "\n".join(
+                f"- {error}"
+                for error in result["errors"]
+            )
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Doğrulama Başarısız",
+
+                f"{band.name} yapılandırmasında sorunlar var:\n\n"
+                f"{message}"
+
+            )
 
     # -------------------------------------------------
     # Reference Sekmesi
