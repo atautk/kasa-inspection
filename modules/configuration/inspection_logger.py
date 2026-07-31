@@ -18,10 +18,29 @@ class InspectionLogger:
         self._ensure_schema()
 
     # -------------------------------------------------
+    # Bağlantı
+    # -------------------------------------------------
+    #
+    # WAL modu + synchronous=NORMAL: ani elektrik kesintisi/çökme
+    # durumunda veritabanının bozulma riskini büyük ölçüde azaltır,
+    # aynı zamanda varsayılan moddan daha hızlı yazma sağlar.
+    # synchronous her bağlantıda ayrıca ayarlanmalı çünkü (journal_mode'un
+    # aksine) veritabanı dosyasında kalıcı olmuyor, bağlantıya özel.
+
+    def _connect(self) -> sqlite3.Connection:
+
+        conn = sqlite3.connect(self.db_path)
+
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+
+        return conn
+
+    # -------------------------------------------------
 
     def _ensure_schema(self):
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
 
         try:
 
@@ -146,7 +165,7 @@ class InspectionLogger:
             for name, data in results.items()
         }
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
 
         try:
 
@@ -177,7 +196,7 @@ class InspectionLogger:
 
     def fetch_recent(self, limit: int = 100) -> list:
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
 
         try:
 
@@ -204,7 +223,7 @@ class InspectionLogger:
 
     def compute_stats(self) -> dict:
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
 
         try:
 
@@ -275,7 +294,7 @@ class InspectionLogger:
         operator_name: str | None = None
     ) -> bool:
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
 
         try:
 
@@ -331,7 +350,7 @@ class InspectionLogger:
         operator_name: str | None = None
     ) -> bool:
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
 
         try:
 
@@ -401,7 +420,7 @@ class InspectionLogger:
 
     def clear(self):
 
-        conn = sqlite3.connect(self.db_path)
+        conn = self._connect()
 
         try:
 

@@ -26,6 +26,10 @@ from PySide6.QtCore import Qt, Signal
 from .image_preview_dialog import ImagePreviewDialog
 from ..window_utils import restore_or_center, save_geometry
 from modules.configuration.inspection_log_exporter import InspectionLogExporter
+from modules.configuration.backup_manager import BackupManager
+from modules.utils.logger import get_logger
+
+app_logger = get_logger()
 
 SETTINGS_KEY = "log_viewer"
 
@@ -47,14 +51,23 @@ class LogViewerDialog(QDialog):
 
     ROI_DETAIL_COLUMNS = ["ROI", "Sonuç", "Tespit Edilen", "Beklenen"]
 
-    def __init__(self, inspection_logger, band_name, parent=None, operator_name=None):
+    def __init__(
+        self,
+        inspection_logger,
+        band_name,
+        parent=None,
+        operator_name=None,
+        band=None
+    ):
 
         super().__init__(parent)
 
         self.inspection_logger = inspection_logger
         self.band_name = band_name
         self.operator_name = operator_name
+        self.band = band
         self.log_exporter = InspectionLogExporter()
+        self.backup_manager = BackupManager()
         self.rows = []
 
         self.current_record = None
@@ -79,6 +92,10 @@ class LogViewerDialog(QDialog):
         self.export_excel_button = QPushButton("Excel'e Aktar")
         self.export_excel_button.clicked.connect(self._on_export_excel_clicked)
         top_row.addWidget(self.export_excel_button)
+
+        self.backup_button = QPushButton("Yedekle")
+        self.backup_button.clicked.connect(self._on_backup_clicked)
+        top_row.addWidget(self.backup_button)
 
         self.clear_button = QPushButton("Geçmişi Temizle")
         top_row.addWidget(self.clear_button)
@@ -268,6 +285,60 @@ class LogViewerDialog(QDialog):
             self,
             "Başarılı",
             f"Inspection geçmişi şu dosyaya aktarıldı:\n{path}"
+        )
+
+    # -------------------------------------------------
+    # Yedekle
+    # -------------------------------------------------
+
+    def _on_backup_clicked(self):
+
+        if self.band is None:
+
+            QMessageBox.warning(
+                self,
+                "Uyarı",
+                "Yedeklenecek band bilgisi bulunamadı."
+            )
+
+            return
+
+        destination = QFileDialog.getExistingDirectory(
+            self,
+            "Yedekleme Klasörü Seç"
+        )
+
+        if not destination:
+            return
+
+        try:
+
+            result_folder = self.backup_manager.backup_band(
+                self.band,
+                destination
+            )
+
+        except Exception as e:
+
+            QMessageBox.critical(
+                self,
+                "Hata",
+                f"Yedekleme başarısız: {e}"
+            )
+
+            return
+
+        app_logger.info(
+            "[%s] band yedeklendi: %s -> %s",
+            self.operator_name or "?",
+            self.band_name,
+            result_folder
+        )
+
+        QMessageBox.information(
+            self,
+            "Başarılı",
+            f"Yedek oluşturuldu:\n{result_folder}"
         )
 
     # -------------------------------------------------

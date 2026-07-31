@@ -41,6 +41,8 @@ class InspectionPage(QWidget):
         enable_selection(enabled: bool)
         show_ng_alert()
         hide_ng_alert()
+        show_disk_warning(free_gb: float)
+        hide_disk_warning()
 
     Controller'ın dinlediği sinyaller:
 
@@ -77,6 +79,17 @@ class InspectionPage(QWidget):
         )
         self.ng_banner.hide()
         root.addWidget(self.ng_banner)
+
+        # ---------- Disk Alanı Uyarısı ----------
+
+        self.disk_warning_banner = QLabel("")
+        self.disk_warning_banner.setAlignment(Qt.AlignCenter)
+        self.disk_warning_banner.setStyleSheet(
+            "background-color: #e08a00; color: white; "
+            "font-size: 14px; font-weight: bold; padding: 6px;"
+        )
+        self.disk_warning_banner.hide()
+        root.addWidget(self.disk_warning_banner)
 
         # ---------- Üst Seçim Satırı ----------
 
@@ -303,3 +316,20 @@ class InspectionPage(QWidget):
     def hide_ng_alert(self):
 
         self.ng_banner.hide()
+
+    # -------------------------------------------------
+    # Disk Alanı Uyarısı
+    # -------------------------------------------------
+
+    def show_disk_warning(self, free_gb: float):
+
+        self.disk_warning_banner.setText(
+            f"⚠ Disk alanı azalıyor: {free_gb:.1f} GB kaldı — "
+            f"yedekleme/temizlik gerekebilir"
+        )
+
+        self.disk_warning_banner.show()
+
+    def hide_disk_warning(self):
+
+        self.disk_warning_banner.hide()

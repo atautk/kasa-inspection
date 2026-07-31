@@ -25,6 +25,7 @@ from modules.ui.inspection.log_viewer_dialog import LogViewerDialog
 
 from modules.controllers.inspection_controller import InspectionController
 from modules.utils.logger import get_logger
+from modules.utils.disk_monitor import get_free_space_gb
 
 app_logger = get_logger()
 
@@ -37,6 +38,9 @@ class InspectionUIController:
 
     CAMERA_FAILURE_THRESHOLD = 30
     RECONNECT_INTERVAL_SECONDS = 3.0
+
+    DISK_WARNING_THRESHOLD_GB = 5.0
+    DISK_CHECK_INTERVAL_SECONDS = 60.0
 
     def __init__(self, window, root=None, operator_name=None):
 
@@ -64,6 +68,8 @@ class InspectionUIController:
         self.inspection_logger = None
         self.ng_capture_manager = NGCaptureManager()
         self.last_alert_state = None
+        self.last_disk_check = 0.0
+        self.disk_warning_active = False
 
         self.reference_image = None
         self.last_reference = None
@@ -340,6 +346,46 @@ class InspectionUIController:
 
         self.page.set_status("Kamera yeniden bağlandı - CONNECTED")
 
+    # -------------------------------------------------
+    # Disk Alanı Kontrolü
+    # -------------------------------------------------
+
+    def _check_disk_space(self):
+
+        now = time.perf_counter()
+
+        if now - self.last_disk_check < self.DISK_CHECK_INTERVAL_SECONDS:
+            return
+
+        self.last_disk_check = now
+
+        check_path = (
+            self.current_band.root
+            if self.current_band is not None
+            else self.band_manager.root
+        )
+
+        free_gb = get_free_space_gb(check_path)
+
+        if free_gb < self.DISK_WARNING_THRESHOLD_GB:
+
+            self.page.show_disk_warning(free_gb)
+
+            if not self.disk_warning_active:
+
+                app_logger.warning(
+                    "Disk alanı azalıyor: %.1f GB kaldı (band=%s)",
+                    free_gb,
+                    self.current_band.name if self.current_band is not None else "?"
+                )
+
+                self.disk_warning_active = True
+
+        else:
+
+            self.page.hide_disk_warning()
+            self.disk_warning_active = False
+
     def _stop(self):
 
         self.timer.stop()
@@ -436,7 +482,8 @@ class InspectionUIController:
             self.inspection_logger,
             self.current_band.name,
             self.window,
-            operator_name=self.operator_name
+            operator_name=self.operator_name,
+            band=self.current_band
         )
 
         self.log_dialog.finished.connect(self._on_history_closed)
@@ -522,6 +569,8 @@ class InspectionUIController:
             )
 
     def _tick_impl(self):
+
+        self._check_disk_space()
 
         if not self.camera_connected:
             self._attempt_camera_reconnect()
