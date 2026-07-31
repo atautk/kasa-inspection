@@ -24,6 +24,7 @@ from PySide6.QtGui import QImage, QPixmap, QColor
 from PySide6.QtCore import Qt, Signal
 
 from .image_preview_dialog import ImagePreviewDialog
+from ..common.trend_chart_widget import TrendChartWidget
 from ..window_utils import restore_or_center, save_geometry
 from modules.configuration.inspection_log_exporter import InspectionLogExporter
 from modules.configuration.backup_manager import BackupManager
@@ -202,6 +203,11 @@ class LogViewerDialog(QDialog):
 
         self.summary_label = QLabel("")
         stats_layout.addWidget(self.summary_label)
+
+        stats_layout.addWidget(QLabel("Günlük NG Oranı Trendi (son 30 gün):"))
+
+        self.trend_chart = TrendChartWidget()
+        stats_layout.addWidget(self.trend_chart)
 
         stats_layout.addWidget(QLabel("Model Bazında:"))
 
@@ -418,6 +424,10 @@ class LogViewerDialog(QDialog):
         self.summary_label.setText(
             f"Toplam: {total}  |  OK: {ok_count}  |  "
             f"NG: {ng_count}  |  NG Oranı: %{ng_ratio:.1f}"
+        )
+
+        self.trend_chart.set_data(
+            self.inspection_logger.compute_daily_trend(30)
         )
 
         self._fill_stats_table(self.model_stats_table, stats["by_model"])

@@ -285,6 +285,67 @@ class InspectionLogger:
         }
 
     # -------------------------------------------------
+    # Günlük NG Oranı Trendi
+    # -------------------------------------------------
+
+    def compute_daily_trend(self, limit_days: int = 30) -> list:
+
+        conn = self._connect()
+
+        try:
+
+            conn.row_factory = sqlite3.Row
+
+            rows = conn.execute(
+                "SELECT timestamp, overall_result FROM inspections "
+                "ORDER BY id"
+            ).fetchall()
+
+        finally:
+
+            conn.close()
+
+        daily = {}
+
+        for row in rows:
+
+            try:
+                local_dt = datetime.fromisoformat(row["timestamp"]).astimezone()
+            except Exception:
+                continue
+
+            date_key = local_dt.strftime("%Y-%m-%d")
+
+            day_stats = daily.setdefault(date_key, {"ok": 0, "ng": 0})
+
+            if row["overall_result"] == "OK":
+                day_stats["ok"] += 1
+            else:
+                day_stats["ng"] += 1
+
+        dates = sorted(daily.keys())[-limit_days:]
+
+        trend = []
+
+        for date_key in dates:
+
+            day_stats = daily[date_key]
+
+            total = day_stats["ok"] + day_stats["ng"]
+
+            ratio = (day_stats["ng"] / total * 100) if total else 0.0
+
+            trend.append({
+                "date": date_key,
+                "total": total,
+                "ok": day_stats["ok"],
+                "ng": day_stats["ng"],
+                "ng_ratio": ratio
+            })
+
+        return trend
+
+    # -------------------------------------------------
     # NG Kaydını İncelenmiş Olarak OK'e Çevir
     # -------------------------------------------------
 
