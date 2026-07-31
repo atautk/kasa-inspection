@@ -72,6 +72,7 @@ class BandManager:
             "name": name,
             "camera": camera,
             "threshold": 3.0,
+            "arduino_port": "",
             "version": "1.0"
 
         }
@@ -131,6 +132,8 @@ class BandManager:
 
             threshold=data.get("threshold", 3.0),
 
+            arduino_port=data.get("arduino_port", ""),
+
             version=data.get("version", "1.0")
 
         )
@@ -150,6 +153,7 @@ class BandManager:
             "name": band.name,
             "camera": band.camera,
             "threshold": band.threshold,
+            "arduino_port": band.arduino_port,
             "version": band.version
 
         }

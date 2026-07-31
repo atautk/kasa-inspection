@@ -21,9 +21,14 @@ class InspectionWindow(QMainWindow):
 
         self.setCentralWidget(self.inspection_page)
 
+        self.close_callback = None
+
     # -------------------------------------------------
 
     def closeEvent(self, event):
+
+        if self.close_callback is not None:
+            self.close_callback()
 
         save_geometry(self, SETTINGS_KEY)
 

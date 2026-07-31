@@ -256,6 +256,7 @@ class ConfiguratorController:
         self.window.tabs.setTabEnabled(3, True)
 
         page.set_threshold(self.current_band.threshold)
+        page.set_arduino_port(self.current_band.arduino_port)
         page.enable_threshold_controls(True)
 
         self.load_reference_tab()
@@ -280,14 +281,17 @@ class ConfiguratorController:
         page = self.window.band_page
 
         self.current_band.threshold = page.get_threshold()
+        self.current_band.arduino_port = page.get_arduino_port()
 
         self.band_manager.save_band(self.current_band)
 
         app_logger.info(
-            "[%s] eşik değiştirildi: %s -> %%%.1f",
+            "[%s] band ayarları değiştirildi: %s -> eşik %%%.1f, "
+            "arduino portu '%s'",
             self.operator_name,
             self.current_band.name,
-            self.current_band.threshold
+            self.current_band.threshold,
+            self.current_band.arduino_port
         )
 
         QMessageBox.information(
@@ -296,7 +300,8 @@ class ConfiguratorController:
 
             "Başarılı",
 
-            f"Eşik değeri %{self.current_band.threshold:.1f} olarak kaydedildi."
+            f"Eşik değeri %{self.current_band.threshold:.1f} olarak "
+            f"kaydedildi."
 
         )
 

@@ -2,6 +2,7 @@
     "id": "band_01",
     "name": "band 1",
     "camera": 0,
-    "threshold": 2.5,
+    "threshold": 3.0,
+    "arduino_port": "COM7",
     "version": "1.0"
 }

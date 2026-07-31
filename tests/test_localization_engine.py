@@ -96,7 +96,13 @@ def test_recovery_uses_correct_marker_corner_index():
     np.testing.assert_array_equal(result["frame_corners"], expected)
 
 
-def test_falls_back_to_last_frame_when_all_markers_lost():
+def test_total_marker_loss_does_not_reuse_stale_frame():
+    """
+    Regresyon testi: kasa/markerlar (0 veya 1 görünür - FAIL) tamamen
+    kaybolduğunda son bilinen kareyi kullanmaya devam etmemeli.
+    Aksi halde kasa tamamen çekilse bile inspection eski, artık
+    anlamsız bir kareyle OK/NG üretmeye devam eder.
+    """
 
     engine = LocalizationEngine()
     engine.update(make_markers([0, 1, 2, 3]))
@@ -104,4 +110,36 @@ def test_falls_back_to_last_frame_when_all_markers_lost():
     result = engine.update({})
 
     assert result["mode"] == "FAIL"
-    assert result["frame_corners"] is not None
+    assert result["frame_corners"] is None
+    assert engine.last_frame_corners is None
+
+
+def test_single_marker_also_counts_as_total_loss():
+
+    engine = LocalizationEngine()
+    engine.update(make_markers([0, 1, 2, 3]))
+
+    result = engine.update(make_markers([0]))
+
+    assert result["mode"] == "FAIL"
+    assert result["frame_corners"] is None
+
+
+def test_reacquiring_after_total_loss_does_not_use_pre_loss_geometry():
+    """
+    Kasa tamamen kaybolduktan sonra (FAIL) geri geldiğinde, henüz
+    tam (4 marker) bir kilit sağlanmadan RECOVERY/ESTIMATE modunun
+    eski (kaybolmadan önceki) konumu kullanmaması gerekir - aksi
+    halde farklı biçimde yerleştirilmiş yeni bir kasa, eski kasanın
+    konumuyla karışabilir.
+    """
+
+    engine = LocalizationEngine()
+    engine.update(make_markers([0, 1, 2, 3]))
+
+    engine.update({})  # kasa tamamen kayboldu (FAIL)
+
+    result = engine.update(make_markers([0, 1, 2]))  # 3 marker geri geldi
+
+    assert result["mode"] == "RECOVERY"
+    assert result["frame_corners"] is None

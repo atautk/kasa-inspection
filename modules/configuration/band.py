@@ -14,4 +14,5 @@ class Band:
 
     camera: int = 0
     threshold: float = 3.0
+    arduino_port: str = ""
     version: str = "1.0"

@@ -11,6 +11,7 @@ from modules.core.localization import LocalizationEngine
 from modules.core.reference_frame import ReferenceFrame
 from modules.core.inspection_engine import InspectionEngine
 from modules.core.decision_engine import DecisionEngine
+from modules.core.arduino_controller import ArduinoController
 
 from modules.configuration.band_manager import BandManager
 from modules.configuration.model_manager import ModelManager
@@ -67,6 +68,7 @@ class InspectionUIController:
         self.inspection_controller = None
         self.inspection_logger = None
         self.ng_capture_manager = NGCaptureManager()
+        self.arduino_controller = None
         self.last_alert_state = None
         self.last_disk_check = 0.0
         self.disk_warning_active = False
@@ -96,6 +98,17 @@ class InspectionUIController:
         self._connect_signals()
 
         self._load_bands()
+
+        self.window.close_callback = self._on_window_closing
+
+    # -------------------------------------------------
+    # Pencere Kapanıyor
+    # -------------------------------------------------
+
+    def _on_window_closing(self):
+
+        if self.running:
+            self._stop()
 
     # -------------------------------------------------
     # Sinyaller
@@ -257,6 +270,8 @@ class InspectionUIController:
 
         self._build_inspection_controller()
 
+        self._connect_arduino()
+
         self.running = True
         self.camera_connected = True
         self.camera_failure_count = 0
@@ -268,6 +283,35 @@ class InspectionUIController:
         self.last_tick_time = time.perf_counter()
 
         self.timer.start()
+
+    def _connect_arduino(self):
+
+        if self.arduino_controller is not None:
+            self.arduino_controller.close()
+            self.arduino_controller = None
+
+        port = self.current_band.arduino_port
+
+        if not port:
+            return
+
+        self.arduino_controller = ArduinoController(port)
+
+        if self.arduino_controller.is_connected():
+
+            app_logger.info(
+                "Arduino'ya bağlandı: %s (band=%s)",
+                port,
+                self.current_band.name
+            )
+
+        else:
+
+            app_logger.warning(
+                "Arduino'ya bağlanılamadı: %s (band=%s)",
+                port,
+                self.current_band.name
+            )
 
     def _open_camera(self, camera_index):
 
@@ -393,6 +437,17 @@ class InspectionUIController:
         if self.cap is not None:
             self.cap.release()
             self.cap = None
+
+        if self.arduino_controller is not None:
+
+            # Kapatmadan önce Arduino'yu bekleme durumuna resetle -
+            # aksi halde Arduino son NG/OK durumunu (buzzer/LED/LCD)
+            # süresiz göstermeye devam eder. "OK" göndermiyoruz çünkü
+            # durdurulduğunda aslında hiçbir şey incelenmiyor.
+            self.arduino_controller.send_waiting()
+
+            self.arduino_controller.close()
+            self.arduino_controller = None
 
         self.running = False
         self.camera_connected = True
@@ -634,7 +689,14 @@ class InspectionUIController:
                 else "NG"
             )
 
-            self._update_ng_alert(overall_result)
+        self._update_ng_alert(overall_result)
+
+        if self.arduino_controller is not None:
+
+            if result["results"]:
+                self.arduino_controller.send_results(result["results"])
+            else:
+                self.arduino_controller.send_waiting()
 
         if (
             self.inspection_logger is not None
@@ -672,7 +734,10 @@ class InspectionUIController:
 
         self.page.set_performance(fps, inspection_time)
 
-        self.page.set_status("CONNECTED")
+        if result["results"]:
+            self.page.set_status("CONNECTED")
+        else:
+            self.page.set_status("Kamera bekleniyor / Parça yok")
 
         if self.debug_enabled:
 

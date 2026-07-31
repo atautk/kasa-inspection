@@ -23,9 +23,23 @@ class LocalizationEngine:
         frame_corners = self._build_frame(markers)
 
         if frame_corners is not None:
+
             self.last_frame_corners = frame_corners.copy()
-        else:
+
+        elif visible >= 2:
+
+            # RECOVERY/ESTIMATE: en az 2 marker görünüyor ama bu kare
+            # için henüz hesaplanmış bir konum yoksa (ör. ilk kare),
+            # son bilinen konumu kullan.
             frame_corners = self.last_frame_corners
+
+        else:
+
+            # FAIL: markerlar (dolayısıyla kasa) tamamen kayboldu.
+            # Eski konumu kullanma - kasa geri geldiğinde eski
+            # konumla karışmasın diye hafızayı da temizle.
+            self.last_frame_corners = None
+            frame_corners = None
 
         return {
 
@@ -59,7 +73,17 @@ class LocalizationEngine:
 
             ])
 
-        # ---------- RECOVERY ----------
+        # ---------- FAIL: kurtarmaya yetecek kadar marker yok ----------
+
+        visible = sum(
+            marker in markers
+            for marker in self.REQUIRED_MARKERS
+        )
+
+        if visible < 2:
+            return None
+
+        # ---------- RECOVERY / ESTIMATE ----------
 
         if self.last_frame_corners is None:
             return None

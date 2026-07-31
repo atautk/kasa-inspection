@@ -12,12 +12,14 @@ class ReferenceFrame:
 
     def generate(self, image, frame_corners):
 
-        # 4 köşe gelmediyse son başarılı görüntüyü döndür
-        if frame_corners is None:
-            return self.last_frame
+        # Köşe konumu yoksa (kasa/markerlar tamamen kaybolduysa) eski,
+        # artık anlamsız hale gelmiş görüntüyü döndürmek yerine hafızayı
+        # temizleyip net bir şekilde "referans yok" bildir.
+        if frame_corners is None or len(frame_corners) != 4:
 
-        if len(frame_corners) != 4:
-            return self.last_frame
+            self.last_frame = None
+
+            return None
 
         src = np.array(frame_corners, dtype=np.float32)
 
