@@ -22,5 +22,8 @@ ng_captures/
 # Pencere boyutu/konum tercihleri (makineye özel)
 window_settings.ini
 
+# Operatör listesi ve PIN hash'leri (makineye özel, PIN içerdiği için git'e girmemeli)
+configuration/operators.json
+
 # Kamera kalibrasyon çıktıları (istersen bunları sonradan ekleyebilirsin)
 # calibration/*.npy

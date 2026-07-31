@@ -63,6 +63,11 @@ class BandPage(QWidget):
 
         layout.addLayout(threshold_row)
 
+        # ---------- Operatör Yönetimi ----------
+
+        self.add_operator_button = QPushButton("Operatör Ekle")
+        layout.addWidget(self.add_operator_button)
+
     # -------------------------------------------------
     # Eşik Kontrolleri
     # -------------------------------------------------

@@ -47,12 +47,13 @@ class LogViewerDialog(QDialog):
 
     ROI_DETAIL_COLUMNS = ["ROI", "Sonuç", "Tespit Edilen", "Beklenen"]
 
-    def __init__(self, inspection_logger, band_name, parent=None):
+    def __init__(self, inspection_logger, band_name, parent=None, operator_name=None):
 
         super().__init__(parent)
 
         self.inspection_logger = inspection_logger
         self.band_name = band_name
+        self.operator_name = operator_name
         self.log_exporter = InspectionLogExporter()
         self.rows = []
 
@@ -292,7 +293,8 @@ class LogViewerDialog(QDialog):
                 color = QColor(255, 200, 200)
 
             reviewed_text = (
-                f"Evet (orijinal: {row['original_result']})"
+                f"Evet - {row['reviewed_by'] or '?'} "
+                f"(orijinal: {row['original_result']})"
                 if reviewed
                 else "-"
             )
@@ -460,7 +462,10 @@ class LogViewerDialog(QDialog):
         if answer != QMessageBox.Yes:
             return
 
-        self.inspection_logger.mark_reviewed_ok(row["id"])
+        self.inspection_logger.mark_reviewed_ok(
+            row["id"],
+            operator_name=self.operator_name
+        )
 
         self.reload()
 
@@ -530,7 +535,8 @@ class LogViewerDialog(QDialog):
         self.inspection_logger.correct_roi(
             self.current_record["id"],
             roi_name,
-            True
+            True,
+            operator_name=self.operator_name
         )
 
         self.reload()

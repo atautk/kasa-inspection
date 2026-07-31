@@ -5,7 +5,8 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QMessageBox,
     QListWidgetItem,
-    QFileDialog
+    QFileDialog,
+    QLineEdit
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -14,6 +15,7 @@ from modules.configuration.reference_manager import ReferenceManager
 from modules.configuration.model_manager import ModelManager
 from modules.configuration.configuration_validator import ConfigurationValidator
 from modules.configuration.band_export_manager import BandExportManager
+from modules.utils.logger import get_logger
 
 # modules/ui/configurator/configurator_controller.py -> proje kökü
 ROOT = Path(__file__).resolve().parents[3]
@@ -24,12 +26,16 @@ from modules.core.localization import LocalizationEngine
 from modules.core.reference_frame import ReferenceFrame
 from modules.core.frame_processor import FrameProcessor
 
+app_logger = get_logger()
+
 
 class ConfiguratorController:
 
-    def __init__(self, window):
+    def __init__(self, window, operator_name=None, operator_manager=None):
 
         self.window = window
+        self.operator_name = operator_name or "?"
+        self.operator_manager = operator_manager
 
         self.band_manager = BandManager(root=ROOT / "configuration")
         self.reference_manager = ReferenceManager()
@@ -96,6 +102,10 @@ class ConfiguratorController:
 
         band_page.import_button.clicked.connect(
             self.import_band
+        )
+
+        band_page.add_operator_button.clicked.connect(
+            self.add_operator
         )
 
         reference_page = self.window.reference_page
@@ -196,6 +206,12 @@ class ConfiguratorController:
 
         self.band_manager.create_band(name)
 
+        app_logger.info(
+            "[%s] yeni band oluşturuldu: %s",
+            self.operator_name,
+            name
+        )
+
         self.load_bands()
 
     # -------------------------------------------------
@@ -266,6 +282,13 @@ class ConfiguratorController:
         self.current_band.threshold = page.get_threshold()
 
         self.band_manager.save_band(self.current_band)
+
+        app_logger.info(
+            "[%s] eşik değiştirildi: %s -> %%%.1f",
+            self.operator_name,
+            self.current_band.name,
+            self.current_band.threshold
+        )
 
         QMessageBox.information(
 
@@ -426,6 +449,65 @@ class ConfiguratorController:
             self.window,
             "Başarılı",
             f"{band.name} yeni bir band olarak içe aktarıldı."
+        )
+
+    # -------------------------------------------------
+    # Operatör Yönetimi
+    # -------------------------------------------------
+
+    def add_operator(self):
+
+        if self.operator_manager is None:
+            return
+
+        name, ok = QInputDialog.getText(
+            self.window,
+            "Yeni Operatör",
+            "Operatör Adı"
+        )
+
+        if not ok:
+            return
+
+        name = name.strip()
+
+        if name == "":
+            return
+
+        pin, ok = QInputDialog.getText(
+            self.window,
+            "Yeni Operatör",
+            f"{name} için PIN belirleyin",
+            QLineEdit.Password
+        )
+
+        if not ok or pin == "":
+            return
+
+        try:
+
+            self.operator_manager.create_operator(name, pin)
+
+        except ValueError as e:
+
+            QMessageBox.warning(
+                self.window,
+                "Hata",
+                str(e)
+            )
+
+            return
+
+        app_logger.info(
+            "[%s] yeni operatör eklendi: %s",
+            self.operator_name,
+            name
+        )
+
+        QMessageBox.information(
+            self.window,
+            "Başarılı",
+            f"{name} operatör olarak eklendi."
         )
 
     # -------------------------------------------------
@@ -716,6 +798,13 @@ class ConfiguratorController:
             f"{len(rois)} ROI kaydedildi."
         )
 
+        app_logger.info(
+            "[%s] ROI'ler kaydedildi: %s (%d ROI)",
+            self.operator_name,
+            self.current_band.name,
+            len(rois)
+        )
+
         QMessageBox.information(
 
             self.window,
@@ -835,6 +924,13 @@ class ConfiguratorController:
             name
         )
 
+        app_logger.info(
+            "[%s] yeni model oluşturuldu: %s / %s",
+            self.operator_name,
+            self.current_band.name,
+            name
+        )
+
         self.load_model_tab()
 
     # -------------------------------------------------
@@ -877,6 +973,13 @@ class ConfiguratorController:
             model_id
         )
 
+        app_logger.info(
+            "[%s] model silindi: %s / %s",
+            self.operator_name,
+            self.current_band.name,
+            model_id
+        )
+
         self.load_model_tab()
 
     # -------------------------------------------------
@@ -906,6 +1009,14 @@ class ConfiguratorController:
         self.model_manager.save_model(
             self.current_band,
             self.current_model
+        )
+
+        app_logger.info(
+            "[%s] model kaydedildi: %s / %s -> beklenen ROI'ler: %s",
+            self.operator_name,
+            self.current_band.name,
+            self.current_model.name,
+            self.current_model.expected_rois
         )
 
         page.set_status(

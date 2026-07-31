@@ -24,6 +24,9 @@ from modules.ui.debug_view import DebugView
 from modules.ui.inspection.log_viewer_dialog import LogViewerDialog
 
 from modules.controllers.inspection_controller import InspectionController
+from modules.utils.logger import get_logger
+
+app_logger = get_logger()
 
 
 class InspectionUIController:
@@ -32,10 +35,14 @@ class InspectionUIController:
     CAMERA_HEIGHT = 720
     TIMER_INTERVAL_MS = 33
 
-    def __init__(self, window, root=None):
+    CAMERA_FAILURE_THRESHOLD = 30
+    RECONNECT_INTERVAL_SECONDS = 3.0
+
+    def __init__(self, window, root=None, operator_name=None):
 
         self.window = window
         self.page = window.inspection_page
+        self.operator_name = operator_name or "?"
 
         band_root = "configuration" if root is None else root / "configuration"
 
@@ -63,6 +70,10 @@ class InspectionUIController:
 
         self.cap = None
         self.running = False
+
+        self.camera_connected = True
+        self.camera_failure_count = 0
+        self.last_reconnect_attempt = 0.0
 
         self.debug_enabled = False
         self.debug_view = DebugView()
@@ -226,15 +237,9 @@ class InspectionUIController:
 
             return
 
-        self.cap = cv2.VideoCapture(
-            self.current_band.camera,
-            cv2.CAP_DSHOW
-        )
+        self.cap = self._open_camera(self.current_band.camera)
 
-        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.CAMERA_WIDTH)
-        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.CAMERA_HEIGHT)
-
-        if not self.cap.isOpened():
+        if self.cap is None:
 
             QMessageBox.warning(
                 self.window,
@@ -242,13 +247,13 @@ class InspectionUIController:
                 "Kamera açılamadı."
             )
 
-            self.cap = None
-
             return
 
         self._build_inspection_controller()
 
         self.running = True
+        self.camera_connected = True
+        self.camera_failure_count = 0
 
         self.page.set_start_button_text("Durdur")
         self.page.enable_selection(False)
@@ -257,6 +262,83 @@ class InspectionUIController:
         self.last_tick_time = time.perf_counter()
 
         self.timer.start()
+
+    def _open_camera(self, camera_index):
+
+        cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
+
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.CAMERA_WIDTH)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.CAMERA_HEIGHT)
+
+        if not cap.isOpened():
+            cap.release()
+            return None
+
+        return cap
+
+    # -------------------------------------------------
+    # Kamera Bağlantısı Koptu / Yeniden Bağlan
+    # -------------------------------------------------
+
+    def _handle_camera_disconnected(self):
+
+        band_name = (
+            self.current_band.name
+            if self.current_band is not None
+            else "?"
+        )
+
+        app_logger.error(
+            "Kamera bağlantısı koptu (band=%s)",
+            band_name
+        )
+
+        self.camera_connected = False
+        self.last_reconnect_attempt = time.perf_counter()
+
+        if self.cap is not None:
+            self.cap.release()
+            self.cap = None
+
+        self.page.set_status(
+            "Kamera bağlantısı koptu, yeniden bağlanılıyor..."
+        )
+
+    def _attempt_camera_reconnect(self):
+
+        now = time.perf_counter()
+
+        if now - self.last_reconnect_attempt < self.RECONNECT_INTERVAL_SECONDS:
+            return
+
+        self.last_reconnect_attempt = now
+
+        camera_index = (
+            self.current_band.camera
+            if self.current_band is not None
+            else 0
+        )
+
+        cap = self._open_camera(camera_index)
+
+        if cap is None:
+
+            self.page.set_status(
+                "Kamera bağlantısı koptu, yeniden bağlanılıyor..."
+            )
+
+            return
+
+        self.cap = cap
+        self.camera_connected = True
+        self.camera_failure_count = 0
+
+        app_logger.info(
+            "Kamera yeniden bağlandı (band=%s)",
+            self.current_band.name if self.current_band is not None else "?"
+        )
+
+        self.page.set_status("Kamera yeniden bağlandı - CONNECTED")
 
     def _stop(self):
 
@@ -267,6 +349,8 @@ class InspectionUIController:
             self.cap = None
 
         self.running = False
+        self.camera_connected = True
+        self.camera_failure_count = 0
 
         self.page.set_start_button_text("Başlat")
         self.page.enable_selection(True)
@@ -351,7 +435,8 @@ class InspectionUIController:
         self.log_dialog = LogViewerDialog(
             self.inspection_logger,
             self.current_band.name,
-            self.window
+            self.window,
+            operator_name=self.operator_name
         )
 
         self.log_dialog.finished.connect(self._on_history_closed)
@@ -380,6 +465,12 @@ class InspectionUIController:
 
         self.inspection_logger.clear()
         self.ng_capture_manager.clear(self.current_band)
+
+        app_logger.info(
+            "[%s] inspection geçmişi temizlendi: %s",
+            self.operator_name,
+            self.current_band.name if self.current_band is not None else "?"
+        )
 
         if self.log_dialog is not None:
             self.log_dialog.reload()
@@ -416,13 +507,41 @@ class InspectionUIController:
 
     def _tick(self):
 
+        try:
+
+            self._tick_impl()
+
+        except Exception:
+
+            app_logger.exception(
+                "Inspection tick sırasında beklenmeyen hata"
+            )
+
+            self.page.set_status(
+                "Beklenmeyen hata oluştu (bkz. logs/app.log)"
+            )
+
+    def _tick_impl(self):
+
+        if not self.camera_connected:
+            self._attempt_camera_reconnect()
+            return
+
         if self.cap is None:
             return
 
         ret, frame = self.cap.read()
 
         if not ret:
+
+            self.camera_failure_count += 1
+
+            if self.camera_failure_count >= self.CAMERA_FAILURE_THRESHOLD:
+                self._handle_camera_disconnected()
+
             return
+
+        self.camera_failure_count = 0
 
         result = self.inspection_controller.process(
             frame,

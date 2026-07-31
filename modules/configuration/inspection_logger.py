@@ -63,6 +63,12 @@ class InspectionLogger:
                     "ALTER TABLE inspections ADD COLUMN original_result TEXT"
                 )
 
+            if "reviewed_by" not in columns:
+
+                conn.execute(
+                    "ALTER TABLE inspections ADD COLUMN reviewed_by TEXT"
+                )
+
             conn.commit()
 
         finally:
@@ -263,7 +269,11 @@ class InspectionLogger:
     # NG Kaydını İncelenmiş Olarak OK'e Çevir
     # -------------------------------------------------
 
-    def mark_reviewed_ok(self, record_id: int) -> bool:
+    def mark_reviewed_ok(
+        self,
+        record_id: int,
+        operator_name: str | None = None
+    ) -> bool:
 
         conn = sqlite3.connect(self.db_path)
 
@@ -288,10 +298,11 @@ class InspectionLogger:
                 UPDATE inspections
                 SET overall_result = 'OK',
                     reviewed = 1,
-                    original_result = ?
+                    original_result = ?,
+                    reviewed_by = ?
                 WHERE id = ?
                 """,
-                (original_result, record_id)
+                (original_result, operator_name, record_id)
             )
 
             conn.commit()
@@ -316,7 +327,8 @@ class InspectionLogger:
         self,
         record_id: int,
         roi_name: str,
-        corrected_ok: bool = True
+        corrected_ok: bool = True,
+        operator_name: str | None = None
     ) -> bool:
 
         conn = sqlite3.connect(self.db_path)
@@ -362,13 +374,15 @@ class InspectionLogger:
                 SET roi_results = ?,
                     overall_result = ?,
                     reviewed = 1,
-                    original_result = ?
+                    original_result = ?,
+                    reviewed_by = ?
                 WHERE id = ?
                 """,
                 (
                     json.dumps(roi_results, ensure_ascii=False),
                     new_overall_result,
                     original_result,
+                    operator_name,
                     record_id
                 )
             )
