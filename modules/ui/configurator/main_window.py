@@ -41,9 +41,14 @@ class MainWindow(QMainWindow):
 
         self.setCentralWidget(self.tabs)
 
+        self.close_callback = None
+
     # -------------------------------------------------
 
     def closeEvent(self, event):
+
+        if self.close_callback is not None:
+            self.close_callback()
 
         save_geometry(self, SETTINGS_KEY)
 

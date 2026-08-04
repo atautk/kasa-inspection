@@ -13,6 +13,7 @@ from PySide6.QtWidgets import (
     QGraphicsPolygonItem,
     QGraphicsPixmapItem,
     QGraphicsSimpleTextItem,
+    QGraphicsEllipseItem,
     QGraphicsItem
 )
 from PySide6.QtGui import (
@@ -26,10 +27,66 @@ from PySide6.QtGui import (
 from PySide6.QtCore import Qt, QPointF
 
 
+class ROIVertexHandle(QGraphicsEllipseItem):
+    """
+    Bir ROI köşe noktasını temsil eden, sürüklenerek o noktayı
+    yeniden konumlandıran (boyutlandırma/yeniden şekillendirme)
+    küçük tutamaç. ROIPolygonItem'ın çocuğu olarak eklenir; bu
+    sayede tüm ROI sürüklenince tutamaçlar otomatik takip eder,
+    ROI silinince de otomatik temizlenir.
+
+    Fare olaylarını (ItemIsMovable yerine) kendi mousePress/Move/
+    ReleaseEvent'leriyle bilinçli olarak yönetir ve event.accept()
+    çağırır. Aksi halde, altındaki poligon da ItemIsMovable
+    olduğundan Qt hangisinin sürükleneceğine tutarsız karar
+    verebiliyor; bazen tutamaç yerine tüm ROI kayıyor, bazen de
+    hiçbir şey olmuyordu.
+    """
+
+    SIZE = 10
+    COLOR = QColor(255, 190, 0)
+    BORDER_COLOR = QColor(120, 90, 0)
+
+    def __init__(self, roi_item, index: int):
+
+        half = self.SIZE / 2
+
+        super().__init__(-half, -half, self.SIZE, self.SIZE)
+
+        self.roi_item = roi_item
+        self.index = index
+
+        self.setPen(QPen(self.BORDER_COLOR, 1))
+        self.setBrush(QBrush(self.COLOR))
+        self.setZValue(10)
+        self.setCursor(Qt.CrossCursor)
+        self.setAcceptedMouseButtons(Qt.LeftButton)
+
+    # -------------------------------------------------
+
+    def mousePressEvent(self, event):
+
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+
+        new_pos = self.mapToParent(event.pos())
+
+        self.setPos(new_pos)
+        self.roi_item.update_vertex(self.index, new_pos)
+
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+
+        event.accept()
+
+
 class ROIPolygonItem(QGraphicsPolygonItem):
     """
     Tek bir ROI'yi (göz) temsil eden polygon.
-    Seçilebilir ve sürüklenebilir.
+    Seçilebilir, sürüklenebilir (taşıma) ve seçiliyken köşe
+    noktalarından tek tek sürüklenerek boyutlandırılabilir.
     """
 
     NORMAL_COLOR = QColor(0, 200, 0)
@@ -45,6 +102,8 @@ class ROIPolygonItem(QGraphicsPolygonItem):
 
         self.roi_id = roi_id
         self.roi_name = name
+
+        self.handles = []
 
         self.setFlag(QGraphicsItem.ItemIsSelectable, True)
         self.setFlag(QGraphicsItem.ItemIsMovable, True)
@@ -78,6 +137,48 @@ class ROIPolygonItem(QGraphicsPolygonItem):
         self._update_label_position()
 
     # -------------------------------------------------
+    # Boyutlandırma Tutamaçları
+    # -------------------------------------------------
+
+    def _create_handles(self):
+
+        self._remove_handles()
+
+        for i in range(self.polygon().count()):
+
+            handle = ROIVertexHandle(self, i)
+            handle.setParentItem(self)
+            handle.setPos(self.polygon().at(i))
+
+            self.handles.append(handle)
+
+    def _remove_handles(self):
+
+        for handle in self.handles:
+
+            handle.setParentItem(None)
+
+            if handle.scene() is not None:
+                handle.scene().removeItem(handle)
+
+        self.handles = []
+
+    def update_vertex(self, index: int, local_pos):
+
+        polygon = self.polygon()
+
+        points = [polygon.at(i) for i in range(polygon.count())]
+
+        if index >= len(points):
+            return
+
+        points[index] = local_pos
+
+        self.setPolygon(QPolygonF(points))
+
+        self._update_label_position()
+
+    # -------------------------------------------------
 
     def itemChange(self, change, value):
 
@@ -91,6 +192,11 @@ class ROIPolygonItem(QGraphicsPolygonItem):
 
             self.setPen(QPen(color, 2))
             self.label.setBrush(QBrush(color))
+
+            if value:
+                self._create_handles()
+            else:
+                self._remove_handles()
 
         return super().itemChange(change, value)
 

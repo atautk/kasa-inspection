@@ -109,6 +109,8 @@ class InspectionUIController:
         if self.running:
             self._stop()
 
+        app_logger.info("[%s] çıkış yaptı (Inspection)", self.operator_name)
+
     # -------------------------------------------------
     # Sinyaller
     # -------------------------------------------------

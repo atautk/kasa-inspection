@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+from serial.tools import list_ports
+
 from PySide6.QtWidgets import (
     QInputDialog,
     QMessageBox,
@@ -19,6 +21,8 @@ from modules.utils.logger import get_logger
 from modules.ui.configurator.operator_management_dialog import (
     OperatorManagementDialog
 )
+from modules.ui.configurator.audit_log_dialog import AuditLogDialog
+from modules.utils.logger import LOG_FILE
 
 # modules/ui/configurator/configurator_controller.py -> proje kökü
 ROOT = Path(__file__).resolve().parents[3]
@@ -75,6 +79,16 @@ class ConfiguratorController:
 
         self.load_bands()
 
+        self.window.close_callback = self._on_window_closing
+
+    # -------------------------------------------------
+    # Pencere Kapanıyor
+    # -------------------------------------------------
+
+    def _on_window_closing(self):
+
+        app_logger.info("[%s] çıkış yaptı (Configurator)", self.operator_name)
+
     # -------------------------------------------------
     # Sinyaller
     # -------------------------------------------------
@@ -99,6 +113,10 @@ class ConfiguratorController:
             self.save_arduino_settings
         )
 
+        band_page.refresh_ports_button.clicked.connect(
+            self.refresh_arduino_ports
+        )
+
         band_page.export_button.clicked.connect(
             self.export_band
         )
@@ -109,6 +127,10 @@ class ConfiguratorController:
 
         band_page.manage_operators_button.clicked.connect(
             self.open_operator_management
+        )
+
+        band_page.audit_log_button.clicked.connect(
+            self.open_audit_log
         )
 
         reference_page = self.window.reference_page
@@ -258,6 +280,7 @@ class ConfiguratorController:
         # Models sekmesi şimdilik serbest.
         self.window.tabs.setTabEnabled(3, True)
 
+        self.refresh_arduino_ports()
         page.set_arduino_port(self.current_band.arduino_port)
         page.enable_arduino_controls(True)
 
@@ -272,6 +295,14 @@ class ConfiguratorController:
             f"{self.current_band.name} açıldı."
 
         )
+
+    # -------------------------------------------------
+
+    def refresh_arduino_ports(self):
+
+        ports = [p.device for p in list_ports.comports()]
+
+        self.window.band_page.set_available_ports(ports)
 
     # -------------------------------------------------
 
@@ -477,6 +508,27 @@ class ConfiguratorController:
             self.operator_manager,
             self.window
         )
+
+        dialog.exec()
+
+    # -------------------------------------------------
+
+    def open_audit_log(self):
+
+        if self.operator_manager is None:
+            return
+
+        if not self.operator_manager.is_admin(self.operator_name):
+
+            QMessageBox.warning(
+                self.window,
+                "Yetkisiz",
+                "Bu işlem için yönetici yetkisi gereklidir."
+            )
+
+            return
+
+        dialog = AuditLogDialog(LOG_FILE, self.window)
 
         dialog.exec()
 
@@ -831,6 +883,15 @@ class ConfiguratorController:
         ])
 
         page.clear_roi_checklist()
+
+        if self.reference_manager.exists(self.current_band):
+            page.set_reference_image(
+                self.reference_manager.load(self.current_band)
+            )
+        else:
+            page.set_reference_image(None)
+
+        page.set_roi_shapes(self._read_roi_file())
 
         self.current_model = None
 

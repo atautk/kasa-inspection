@@ -11,6 +11,10 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
+from modules.utils.logger import get_logger
+
+app_logger = get_logger()
+
 
 class LoginDialog(QDialog):
     """
@@ -104,6 +108,8 @@ class LoginDialog(QDialog):
             return
 
         self.authenticated_operator = name
+
+        app_logger.info("[%s] giriş yaptı", name)
 
         self.accept()
 
