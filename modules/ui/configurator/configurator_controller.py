@@ -23,6 +23,7 @@ from modules.ui.configurator.operator_management_dialog import (
 )
 from modules.ui.configurator.audit_log_dialog import AuditLogDialog
 from modules.utils.logger import LOG_FILE
+from modules.utils.test_runner import TestRunner
 
 # modules/ui/configurator/configurator_controller.py -> proje kökü
 ROOT = Path(__file__).resolve().parents[3]
@@ -62,6 +63,9 @@ class ConfiguratorController:
         self.localizer = LocalizationEngine()
         self.reference_frame = ReferenceFrame()
         self.roi_auto_detector = ROIAutoDetector()
+
+        self.test_runner = TestRunner()
+        self.test_runner.finished.connect(self._on_tests_finished)
 
         self.frame_processor = FrameProcessor(
             self.aruco,
@@ -177,6 +181,10 @@ class ConfiguratorController:
             self.on_model_selected
         )
 
+        self.window.test_runner_page.run_button.clicked.connect(
+            self.run_tests
+        )
+
         self.window.tabs.currentChanged.connect(
             self.on_tab_changed
         )
@@ -192,6 +200,50 @@ class ConfiguratorController:
         elif index == 3:
 
             self.load_model_tab()
+
+    # -------------------------------------------------
+    # Test Çalıştırma
+    # -------------------------------------------------
+
+    def run_tests(self):
+
+        if self.test_runner.is_running():
+            return
+
+        page = self.window.test_runner_page
+
+        page.set_running(True)
+        page.set_summary("Testler çalışıyor...")
+        page.clear_results()
+
+        self.test_runner.run()
+
+    def _on_tests_finished(self, data: dict):
+
+        page = self.window.test_runner_page
+
+        page.set_running(False)
+        page.set_summary(data["summary"])
+        page.set_results(data["results"])
+
+        app_logger.info(
+            "[%s] testler çalıştırıldı: %s",
+            self.operator_name,
+            data["summary"]
+        )
+
+        if not data["success"]:
+
+            for result in data["results"]:
+
+                if result["status"] in ("failed", "error"):
+
+                    app_logger.error(
+                        "[%s] test hatası - %s:\n%s",
+                        self.operator_name,
+                        result["name"],
+                        result["message"]
+                    )
 
     # -------------------------------------------------
     # Band Yönetimi

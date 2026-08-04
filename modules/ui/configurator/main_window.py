@@ -7,6 +7,7 @@ from .band_page import BandPage
 from .reference_page import ReferencePage
 from .roi_page import ROIPage
 from .model_page import ModelPage
+from .test_runner_page import TestRunnerPage
 
 from ..window_utils import restore_or_center, save_geometry
 
@@ -29,11 +30,13 @@ class MainWindow(QMainWindow):
         self.reference_page = ReferencePage()
         self.roi_page = ROIPage()
         self.model_page = ModelPage()
+        self.test_runner_page = TestRunnerPage()
 
         self.tabs.addTab(self.band_page, "Band")
         self.tabs.addTab(self.reference_page, "Reference")
         self.tabs.addTab(self.roi_page, "ROI")
         self.tabs.addTab(self.model_page, "Models")
+        self.tabs.addTab(self.test_runner_page, "Testler")
 
         self.tabs.setTabEnabled(1, False)
         self.tabs.setTabEnabled(2, False)
