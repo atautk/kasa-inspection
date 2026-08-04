@@ -9,13 +9,35 @@ from .band import Band
 
 class InspectionLogger:
 
+    # Kamera titremesi/geçici gürültü nedeniyle OK<->NG durumu tek bir
+    # karede yanlışlıkla değişebilir (aynı fiziksel kasa hareket
+    # etmediği halde). Bunu "gerçek" bir değişiklik kabul etmeden önce
+    # yeni durumun bu kadar ardışık karede tutarlı kalmasını bekleriz -
+    # aksi halde aynı hata birden fazla kez loglanıp bildirilir.
+    # Varsayılan; gerçek değer band.confirm_frames'ten okunur ve
+    # Debug penceresinden canlı değiştirilebilir (bkz. set_confirm_frames).
+    CONFIRM_FRAMES = 3
+
     def __init__(self, band: Band):
 
         self.db_path = band.root / "inspection_log.db"
 
+        self.confirm_frames = getattr(
+            band, "confirm_frames", self.CONFIRM_FRAMES
+        )
+
         self.last_overall_result = None
 
+        self.pending_result = None
+        self.pending_count = 0
+
         self._ensure_schema()
+
+    # -------------------------------------------------
+
+    def set_confirm_frames(self, value: int):
+
+        self.confirm_frames = max(1, int(value))
 
     # -------------------------------------------------
     # Bağlantı
@@ -109,7 +131,29 @@ class InspectionLogger:
 
         overall_result = self._compute_overall_result(results)
 
-        return overall_result != self.last_overall_result
+        if overall_result == self.last_overall_result:
+
+            # Zaten kayıtlı durumla aynı - önceden birikmiş yarım kalmış
+            # bir "aday değişiklik" varsa (ör. tek karelik bir titreşimdi
+            # ve şimdi eski durumuna döndü) onu da iptal et.
+            self.pending_result = None
+            self.pending_count = 0
+
+            return False
+
+        # İlk hiç kayıt yoksa (last_overall_result None) hemen kabul et -
+        # bu bir "titreşim" değil, ilk gözlem. Sonraki gerçek geçişler
+        # için ardışık doğrulama bekleriz.
+        if self.last_overall_result is None:
+            return True
+
+        if overall_result == self.pending_result:
+            self.pending_count += 1
+        else:
+            self.pending_result = overall_result
+            self.pending_count = 1
+
+        return self.pending_count >= self.confirm_frames
 
     def log(
         self,
@@ -124,6 +168,9 @@ class InspectionLogger:
         overall_result = self._compute_overall_result(results)
 
         self.last_overall_result = overall_result
+
+        self.pending_result = None
+        self.pending_count = 0
 
         self._insert(overall_result, model_name, results, image_path)
 

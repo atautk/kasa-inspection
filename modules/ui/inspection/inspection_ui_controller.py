@@ -186,6 +186,9 @@ class InspectionUIController:
 
         if self.debug_dialog is not None:
             self.debug_dialog.set_threshold(self.current_band.threshold)
+            self.debug_dialog.set_confirm_frames(
+                self.current_band.confirm_frames
+            )
 
         self.roi_manager.load(self.current_band.roi)
 
@@ -264,6 +267,25 @@ class InspectionUIController:
 
         app_logger.info(
             "[%s] eşik canlı değiştirildi: %s -> %%%.1f",
+            self.operator_name,
+            self.current_band.name,
+            value
+        )
+
+    def _on_confirm_frames_changed(self, value):
+
+        if self.current_band is None:
+            return
+
+        self.current_band.confirm_frames = value
+
+        self.band_manager.save_band(self.current_band)
+
+        if self.inspection_logger is not None:
+            self.inspection_logger.set_confirm_frames(value)
+
+        app_logger.info(
+            "[%s] onay karesi sayısı canlı değiştirildi: %s -> %s",
             self.operator_name,
             self.current_band.name,
             value
@@ -665,9 +687,16 @@ class InspectionUIController:
 
             if self.current_band is not None:
                 self.debug_dialog.set_threshold(self.current_band.threshold)
+                self.debug_dialog.set_confirm_frames(
+                    self.current_band.confirm_frames
+                )
 
             self.debug_dialog.threshold_spinbox.valueChanged.connect(
                 self._on_threshold_changed
+            )
+
+            self.debug_dialog.confirm_frames_spinbox.valueChanged.connect(
+                self._on_confirm_frames_changed
             )
 
             self.debug_dialog.finished.connect(self._on_debug_dialog_closed)

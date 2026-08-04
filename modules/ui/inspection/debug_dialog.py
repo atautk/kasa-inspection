@@ -7,6 +7,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QDoubleSpinBox,
+    QSpinBox,
     QScrollArea
 )
 from PySide6.QtGui import QImage, QPixmap
@@ -19,10 +20,10 @@ SETTINGS_KEY = "debug_dialog"
 
 class DebugDialog(QDialog):
     """
-    ROI bazında referans/güncel/fark/binary karelerini ve değişim
-    eşiğini bir arada gösteren pencere. Eşik burada değiştirildiğinde
-    canlı olarak inceleme motoruna uygulanır (Debug açıkken izleyerek
-    ayarlamak için).
+    ROI bazında referans/güncel/fark/binary karelerini, değişim
+    eşiğini ve onay karesi sayısını bir arada gösteren pencere. Bu
+    ayarlar burada değiştirildiğinde canlı olarak inceleme motoruna
+    uygulanır (Debug açıkken izleyerek ayarlamak için).
     """
 
     THUMB_WIDTH = 220
@@ -59,6 +60,22 @@ class DebugDialog(QDialog):
 
         layout.addLayout(threshold_row)
 
+        confirm_row = QHBoxLayout()
+
+        confirm_row.addWidget(
+            QLabel(
+                "Onay Karesi Sayısı (kamera titremesi filtresi):"
+            )
+        )
+
+        self.confirm_frames_spinbox = QSpinBox()
+        self.confirm_frames_spinbox.setRange(1, 30)
+        confirm_row.addWidget(self.confirm_frames_spinbox)
+
+        confirm_row.addStretch()
+
+        layout.addLayout(confirm_row)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         layout.addWidget(scroll)
@@ -83,6 +100,20 @@ class DebugDialog(QDialog):
     def get_threshold(self) -> float:
 
         return self.threshold_spinbox.value()
+
+    # -------------------------------------------------
+    # Onay Karesi Sayısı Ayarı
+    # -------------------------------------------------
+
+    def set_confirm_frames(self, value: int):
+
+        self.confirm_frames_spinbox.blockSignals(True)
+        self.confirm_frames_spinbox.setValue(value)
+        self.confirm_frames_spinbox.blockSignals(False)
+
+    def get_confirm_frames(self) -> int:
+
+        return self.confirm_frames_spinbox.value()
 
     # -------------------------------------------------
 

@@ -50,11 +50,123 @@ def test_repeated_same_result_is_not_logged_again(logger):
     assert logger.log_if_changed(make_result(True), "clio") is False
 
 
-def test_ok_to_ng_transition_is_logged(logger):
+def test_ok_to_ng_transition_is_logged_after_confirmation(logger):
 
     logger.log_if_changed(make_result(True), "clio")
 
+    # tek karelik bir NG, kamera titremesi olabilir - hemen loglanmamalı
+    assert logger.log_if_changed(make_result(False), "clio") is False
+    assert logger.log_if_changed(make_result(False), "clio") is False
+
+    # CONFIRM_FRAMES'e ulaşınca (ardışık aynı yeni durum) loglanmalı
     assert logger.log_if_changed(make_result(False), "clio") is True
+
+
+def test_single_frame_flicker_does_not_trigger_logging():
+    """
+    Regresyon testi: kamera oynadığı için tek bir karede OK<->NG
+    yanlışlıkla değişip hemen eski durumuna dönerse, aynı fiziksel
+    kasa için birden fazla loglama/bildirim tetiklenmemeli.
+    """
+
+    from modules.configuration.band import Band
+    import tempfile
+    from pathlib import Path
+
+    root = Path(tempfile.mkdtemp())
+    band = Band(
+        id="test_band", name="Test Band", root=root,
+        reference=root / "reference.png", roi=root / "roi.json",
+        models=root / "models"
+    )
+    logger = InspectionLogger(band)
+
+    logger.log_if_changed(make_result(True), "clio")
+
+    # kamera titremesi: bir kare NG, hemen ardından tekrar OK
+    assert logger.log_if_changed(make_result(False), "clio") is False
+    assert logger.log_if_changed(make_result(True), "clio") is False
+
+    stats = logger.compute_stats()
+    assert stats["total"] == 1
+    assert stats["ok_count"] == 1
+    assert stats["ng_count"] == 0
+
+
+def test_intermittent_flicker_resets_confirmation_streak():
+    """
+    Ardışık olmayan (OK ile bölünmüş) NG kareleri doğrulama sayacını
+    sıfırlamalı - sadece KESİNTİSİZ CONFIRM_FRAMES kadar aynı sonuç
+    gerçek bir geçiş sayılmalı.
+    """
+
+    from modules.configuration.band import Band
+    import tempfile
+    from pathlib import Path
+
+    root = Path(tempfile.mkdtemp())
+    band = Band(
+        id="test_band", name="Test Band", root=root,
+        reference=root / "reference.png", roi=root / "roi.json",
+        models=root / "models"
+    )
+    logger = InspectionLogger(band)
+
+    logger.log_if_changed(make_result(True), "clio")
+
+    assert logger.log_if_changed(make_result(False), "clio") is False  # NG #1
+    assert logger.log_if_changed(make_result(False), "clio") is False  # NG #2
+    assert logger.log_if_changed(make_result(True), "clio") is False   # OK - sayaç sıfırlanır
+    assert logger.log_if_changed(make_result(False), "clio") is False  # NG #1 (yeni seri)
+    assert logger.log_if_changed(make_result(False), "clio") is False  # NG #2
+    assert logger.log_if_changed(make_result(False), "clio") is True   # NG #3 - onaylandı
+
+
+def test_confirm_frames_is_read_from_band(band):
+
+    band.confirm_frames = 5
+
+    logger = InspectionLogger(band)
+
+    assert logger.confirm_frames == 5
+
+
+def test_confirm_frames_defaults_to_three_for_band_without_attribute():
+
+    class LegacyBand:
+        root = None
+
+    legacy = LegacyBand()
+
+    import tempfile
+    from pathlib import Path
+
+    legacy.root = Path(tempfile.mkdtemp())
+
+    logger = InspectionLogger(legacy)
+
+    assert logger.confirm_frames == 3
+
+
+def test_set_confirm_frames_changes_behavior_live(logger):
+
+    logger.set_confirm_frames(1)
+
+    logger.log_if_changed(make_result(True), "clio")
+
+    # confirm_frames=1 iken tek kare bile geçişi onaylamalı
+    assert logger.log_if_changed(make_result(False), "clio") is True
+
+
+def test_set_confirm_frames_rejects_values_below_one(logger):
+
+    logger.set_confirm_frames(0)
+
+    assert logger.confirm_frames == 1
+
+    logger.set_confirm_frames(-5)
+
+    assert logger.confirm_frames == 1
 
 
 def test_empty_results_are_never_logged(logger):
@@ -65,7 +177,9 @@ def test_empty_results_are_never_logged(logger):
 def test_fetch_recent_returns_most_recent_first(logger):
 
     logger.log_if_changed(make_result(True), "clio")
-    logger.log_if_changed(make_result(False), "clio")
+
+    for _ in range(InspectionLogger.CONFIRM_FRAMES):
+        logger.log_if_changed(make_result(False), "clio")
 
     rows = logger.fetch_recent()
 
@@ -146,9 +260,13 @@ def test_correct_roi_unknown_roi_returns_false(logger):
 
 def test_compute_stats_counts_ok_and_ng_correctly(logger):
 
-    logger.log_if_changed(make_result(True), "clio")
-    logger.log_if_changed(make_result(False), "clio")
-    logger.log_if_changed(make_result(True), "clio")
+    logger.log_if_changed(make_result(True), "clio")  # ilk kayıt, anında
+
+    for _ in range(InspectionLogger.CONFIRM_FRAMES):
+        logger.log_if_changed(make_result(False), "clio")  # NG'ye onaylı geçiş
+
+    for _ in range(InspectionLogger.CONFIRM_FRAMES):
+        logger.log_if_changed(make_result(True), "clio")  # OK'e onaylı geçiş
 
     stats = logger.compute_stats()
 

@@ -29,6 +29,7 @@ def test_create_band_writes_default_roi_and_band_json(manager):
     assert band.camera == 2
     assert band.threshold == 3.0
     assert band.arduino_port == ""
+    assert band.confirm_frames == 3
 
 
 def test_save_and_load_roundtrip_preserves_settings(manager):
@@ -38,6 +39,7 @@ def test_save_and_load_roundtrip_preserves_settings(manager):
     band.threshold = 7.5
     band.arduino_port = "COM7"
     band.name = "Clio Hattı v2"
+    band.confirm_frames = 5
 
     manager.save_band(band)
 
@@ -46,6 +48,27 @@ def test_save_and_load_roundtrip_preserves_settings(manager):
     assert reloaded.threshold == 7.5
     assert reloaded.arduino_port == "COM7"
     assert reloaded.name == "Clio Hattı v2"
+    assert reloaded.confirm_frames == 5
+
+
+def test_load_band_without_confirm_frames_field_defaults_to_three(
+    manager, tmp_path
+):
+
+    # Bu alan eklenmeden önce kaydedilmiş eski bir band.json'u simüle et
+    import json
+
+    band = manager.create_band("Eski Band")
+
+    data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
+    del data["confirm_frames"]
+    (band.root / "band.json").write_text(
+        json.dumps(data), encoding="utf-8"
+    )
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.confirm_frames == 3
 
 
 def test_load_unknown_band_raises(manager):
