@@ -88,8 +88,11 @@ class InspectionProcessor:
                         current_crop
                     )
 
+                    roi_threshold = self.recipe.threshold_for(roi_name)
+
                     state = self.decision.detect(
-                        compare
+                        compare,
+                        threshold=roi_threshold
                     )
 
                     expected = self.recipe.expected(

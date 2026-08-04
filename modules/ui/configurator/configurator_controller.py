@@ -1046,7 +1046,8 @@ class ConfiguratorController:
 
         page.set_roi_checklist(
             roi_names,
-            self.current_model.expected_rois
+            self.current_model.expected_rois,
+            self.current_model.roi_thresholds
         )
 
         page.set_status(f"{self.current_model.name} yüklendi.")
@@ -1163,17 +1164,23 @@ class ConfiguratorController:
             page.get_checked_rois()
         )
 
+        self.current_model.roi_thresholds = (
+            page.get_roi_thresholds()
+        )
+
         self.model_manager.save_model(
             self.current_band,
             self.current_model
         )
 
         app_logger.info(
-            "[%s] model kaydedildi: %s / %s -> beklenen ROI'ler: %s",
+            "[%s] model kaydedildi: %s / %s -> beklenen ROI'ler: %s, "
+            "eşik override'ları: %s",
             self.operator_name,
             self.current_band.name,
             self.current_model.name,
-            self.current_model.expected_rois
+            self.current_model.expected_rois,
+            self.current_model.roi_thresholds
         )
 
         page.set_status(

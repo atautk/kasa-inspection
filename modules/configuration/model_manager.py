@@ -75,6 +75,11 @@ class ModelManager:
             version=data.get(
                 "version",
                 "1.0"
+            ),
+
+            roi_thresholds=data.get(
+                "roi_thresholds",
+                {}
             )
 
         )
@@ -99,7 +104,9 @@ class ModelManager:
 
             "version": model.version,
 
-            "expected_rois": model.expected_rois
+            "expected_rois": model.expected_rois,
+
+            "roi_thresholds": model.roi_thresholds
 
         }
 

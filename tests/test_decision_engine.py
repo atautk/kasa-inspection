@@ -46,3 +46,24 @@ def test_set_threshold_accepts_string_like_values():
     engine.set_threshold("7.5")
 
     assert engine.change_threshold == 7.5
+
+
+def test_per_call_threshold_overrides_global_without_changing_it():
+
+    engine = DecisionEngine()
+    engine.set_threshold(10.0)
+
+    assert engine.detect({"change_ratio": 5.0}, threshold=3.0) == "FULL"
+    assert engine.detect({"change_ratio": 5.0}, threshold=8.0) == "EMPTY"
+
+    # global esik degismemis olmali
+    assert engine.change_threshold == 10.0
+    assert engine.detect({"change_ratio": 5.0}) == "EMPTY"
+
+
+def test_threshold_none_falls_back_to_global():
+
+    engine = DecisionEngine()
+    engine.set_threshold(4.0)
+
+    assert engine.detect({"change_ratio": 4.0}, threshold=None) == "FULL"

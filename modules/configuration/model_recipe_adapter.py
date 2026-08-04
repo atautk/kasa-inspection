@@ -29,6 +29,20 @@ class ModelRecipeAdapter:
 
     # -------------------------------------------------
 
+    def threshold_for(self, roi_name: str):
+        """
+        Bu model, roi_name için özel bir değişim eşiği tanımlamışsa
+        onu döndürür; tanımlamamışsa None döner (bandın genel eşiği
+        kullanılır).
+        """
+
+        if self.model is None:
+            return None
+
+        return self.model.roi_thresholds.get(roi_name)
+
+    # -------------------------------------------------
+
     def is_loaded(self) -> bool:
 
         return self.model is not None

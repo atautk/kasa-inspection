@@ -1,8 +1,15 @@
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
 LOG_FILE = LOG_DIR / "app.log"
+
+# Fabrikada makine sürekli açık kalabildiği için app.log sınırsız
+# büyümesin diye döndürülüyor: 5 MB'a ulaşınca app.log.1, app.log.2
+# ... şeklinde en fazla 5 yedek dosya tutulur, eskiler silinir.
+MAX_BYTES = 5_000_000
+BACKUP_COUNT = 5
 
 _logger = None
 
@@ -29,7 +36,12 @@ def get_logger() -> logging.Logger:
 
     if not logger.handlers:
 
-        handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+        handler = RotatingFileHandler(
+            LOG_FILE,
+            maxBytes=MAX_BYTES,
+            backupCount=BACKUP_COUNT,
+            encoding="utf-8"
+        )
 
         handler.setFormatter(
             logging.Formatter(

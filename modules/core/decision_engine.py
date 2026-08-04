@@ -27,7 +27,8 @@ class DecisionEngine:
 
     def detect(
         self,
-        result
+        result,
+        threshold=None
     ):
 
         ratio = result.get(
@@ -35,7 +36,13 @@ class DecisionEngine:
             0
         )
 
-        if ratio >= self.change_threshold:
+        active_threshold = (
+            self.change_threshold
+            if threshold is None
+            else threshold
+        )
+
+        if ratio >= active_threshold:
 
             return "FULL"
 

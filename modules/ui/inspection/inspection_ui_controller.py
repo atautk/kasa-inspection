@@ -19,6 +19,7 @@ from modules.configuration.reference_manager import ReferenceManager
 from modules.configuration.model_recipe_adapter import ModelRecipeAdapter
 from modules.configuration.inspection_logger import InspectionLogger
 from modules.configuration.ng_capture_manager import NGCaptureManager
+from modules.configuration.configuration_validator import ConfigurationValidator
 
 from modules.ui.roi_manager import ROIManager
 from modules.ui.inspection.debug_dialog import DebugDialog
@@ -40,6 +41,8 @@ class InspectionUIController:
     CAMERA_FAILURE_THRESHOLD = 30
     RECONNECT_INTERVAL_SECONDS = 3.0
 
+    ARDUINO_RECONNECT_INTERVAL_SECONDS = 5.0
+
     DISK_WARNING_THRESHOLD_GB = 5.0
     DISK_CHECK_INTERVAL_SECONDS = 60.0
 
@@ -54,6 +57,7 @@ class InspectionUIController:
         self.band_manager = BandManager(root=band_root)
         self.model_manager = ModelManager()
         self.reference_manager = ReferenceManager()
+        self.configuration_validator = ConfigurationValidator()
 
         self.bands = []
         self.models = []
@@ -82,6 +86,8 @@ class InspectionUIController:
         self.camera_connected = True
         self.camera_failure_count = 0
         self.last_reconnect_attempt = 0.0
+
+        self.last_arduino_reconnect_attempt = 0.0
 
         self.debug_enabled = False
         self.debug_dialog = None
@@ -165,6 +171,8 @@ class InspectionUIController:
 
         self.current_band = self.bands[index]
 
+        self._warn_if_band_config_invalid(self.current_band)
+
         self.inspection_logger = InspectionLogger(self.current_band)
 
         if self.debug_dialog is not None:
@@ -190,6 +198,30 @@ class InspectionUIController:
             self.current_model = None
             self.recipe_manager = ModelRecipeAdapter(None)
             self._build_inspection_controller()
+
+    def _warn_if_band_config_invalid(self, band):
+
+        result = self.configuration_validator.validate(band)
+
+        if result["valid"]:
+            return
+
+        message = "\n".join(f"- {error}" for error in result["errors"])
+
+        app_logger.warning(
+            "[%s] '%s' bandı eksik/hatalı yapılandırmayla açıldı: %s",
+            self.operator_name,
+            band.name,
+            "; ".join(result["errors"])
+        )
+
+        QMessageBox.warning(
+            self.window,
+            "Band Yapılandırması Eksik",
+            f"'{band.name}' bandında şu sorunlar var:\n\n{message}\n\n"
+            "İncelemeye başlamadan önce Configurator'dan düzeltmeniz "
+            "önerilir."
+        )
 
     def _select_model(self, index):
 
@@ -341,6 +373,36 @@ class InspectionUIController:
                 "Arduino'ya bağlanılamadı: %s (band=%s)",
                 port,
                 self.current_band.name
+            )
+
+    def _attempt_arduino_reconnect(self):
+        """
+        Kamera gibi Arduino da (kablo çekilmesi, USB kopması vb.)
+        bağlantı koptuğunda kendiliğinden tekrar bağlanmayı dener.
+        Her tick'te değil, ARDUINO_RECONNECT_INTERVAL_SECONDS'ta bir
+        denenir (bağlantı denemesi ~2 saniye bloklayabildiği için).
+        """
+
+        now = time.perf_counter()
+
+        if (
+            now - self.last_arduino_reconnect_attempt
+            < self.ARDUINO_RECONNECT_INTERVAL_SECONDS
+        ):
+            return
+
+        self.last_arduino_reconnect_attempt = now
+
+        port = self.arduino_controller.port
+
+        self.arduino_controller.close()
+        self.arduino_controller = ArduinoController(port)
+
+        if self.arduino_controller.is_connected():
+
+            app_logger.info(
+                "Arduino ile bağlantı yeniden kuruldu: %s",
+                port
             )
 
     def _open_camera(self, camera_index):
@@ -685,6 +747,12 @@ class InspectionUIController:
 
         self._check_disk_space()
 
+        if (
+            self.arduino_controller is not None
+            and not self.arduino_controller.is_connected()
+        ):
+            self._attempt_arduino_reconnect()
+
         if not self.camera_connected:
             self._attempt_camera_reconnect()
             return
@@ -787,7 +855,15 @@ class InspectionUIController:
 
         if localization is not None:
 
-            self.page.set_mode(localization["mode"])
+            mode_text = localization["mode"]
+
+            if (
+                mode_text == "NORMAL"
+                and not localization.get("settled", True)
+            ):
+                mode_text += " (kalibre ediliyor)"
+
+            self.page.set_mode(mode_text)
             self.page.set_confidence(localization["confidence"])
 
         self.page.set_performance(fps, inspection_time)

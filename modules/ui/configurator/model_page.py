@@ -6,6 +6,10 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QListWidget,
     QListWidgetItem,
+    QTableWidget,
+    QTableWidgetItem,
+    QHeaderView,
+    QLineEdit,
     QPushButton,
     QLabel,
     QGraphicsView,
@@ -76,12 +80,14 @@ class ModelPage(QWidget):
     (models/*.json) işini bilmez, bunu Controller yapar.
 
     Bir "Model" = isim (Clio, Duster, ...) + hangi ROI'lerin
-    DOLU (FULL) olması gerektiği. Listede olmayan her ROI
-    otomatik olarak BOŞ (EMPTY) kabul edilir.
+    DOLU (FULL) olması gerektiği + (opsiyonel) ROI başına özel
+    değişim eşiği. Listede olmayan her ROI otomatik olarak BOŞ
+    (EMPTY) kabul edilir; eşik override boş bırakılırsa bandın
+    genel eşiği kullanılır.
 
-    Beklenen durum hem sağdaki işaretli liste hem de referans
-    fotoğrafı üzerindeki ROI'lere tıklanarak seçilebilir; ikisi
-    birbiriyle senkronize kalır.
+    Beklenen durum hem sağdaki tablodan hem de referans fotoğrafı
+    üzerindeki ROI'lere tıklanarak seçilebilir; ikisi birbiriyle
+    senkronize kalır.
 
     Controller'ın kullandığı public metodlar:
 
@@ -89,8 +95,9 @@ class ModelPage(QWidget):
         get_selected_model_id() -> str | None
         set_reference_image(image)
         set_roi_shapes(rois: list[dict])
-        set_roi_checklist(roi_names, checked_names)
+        set_roi_checklist(roi_names, checked_names, thresholds=None)
         get_checked_rois() -> list[str]
+        get_roi_thresholds() -> dict[str, float]
         clear_roi_checklist()
         set_status(text)
 
@@ -148,7 +155,22 @@ class ModelPage(QWidget):
         self.preview_view.setMinimumSize(480, 360)
         right_column.addWidget(self.preview_view, stretch=2)
 
-        self.roi_checklist = QListWidget()
+        right_column.addWidget(
+            QLabel(
+                "Eşik Override sütunu boş bırakılırsa bandın genel "
+                "değişim eşiği kullanılır."
+            )
+        )
+
+        self.roi_checklist = QTableWidget()
+        self.roi_checklist.setColumnCount(3)
+        self.roi_checklist.setHorizontalHeaderLabels(
+            ["DOLU", "ROI", "Eşik Override (%)"]
+        )
+        self.roi_checklist.horizontalHeader().setSectionResizeMode(
+            1, QHeaderView.Stretch
+        )
+        self.roi_checklist.verticalHeader().setVisible(False)
         self.roi_checklist.itemChanged.connect(
             self._on_checklist_item_changed
         )
@@ -249,23 +271,33 @@ class ModelPage(QWidget):
 
     def toggle_roi(self, name: str):
 
-        for i in range(self.roi_checklist.count()):
+        for row in range(self.roi_checklist.rowCount()):
 
-            item = self.roi_checklist.item(i)
+            name_item = self.roi_checklist.item(row, 1)
 
-            if item.text() == name:
+            if name_item is not None and name_item.text() == name:
 
-                item.setCheckState(
+                check_item = self.roi_checklist.item(row, 0)
+
+                check_item.setCheckState(
                     Qt.Unchecked
-                    if item.checkState() == Qt.Checked
+                    if check_item.checkState() == Qt.Checked
                     else Qt.Checked
                 )
 
                 return
 
-    def _on_checklist_item_changed(self, item: QListWidgetItem):
+    def _on_checklist_item_changed(self, item: QTableWidgetItem):
 
-        roi_item = self.roi_items.get(item.text())
+        if item.column() != 0:
+            return
+
+        name_item = self.roi_checklist.item(item.row(), 1)
+
+        if name_item is None:
+            return
+
+        roi_item = self.roi_items.get(name_item.text())
 
         if roi_item is not None:
             roi_item.apply_state(item.checkState() == Qt.Checked)
@@ -278,32 +310,49 @@ class ModelPage(QWidget):
             roi_item.apply_state(name in checked)
 
     # -------------------------------------------------
-    # Beklenen Durum (ROI Checklist)
+    # Beklenen Durum (ROI Tablosu: DOLU / Eşik Override)
     # -------------------------------------------------
 
-    def set_roi_checklist(self, roi_names: list, checked_names: list):
+    def set_roi_checklist(
+        self,
+        roi_names: list,
+        checked_names: list,
+        thresholds: dict = None
+    ):
 
+        thresholds = thresholds or {}
         checked_set = set(checked_names)
 
         self.roi_checklist.blockSignals(True)
 
-        self.roi_checklist.clear()
+        self.roi_checklist.setRowCount(len(roi_names))
 
-        for name in roi_names:
+        for row, name in enumerate(roi_names):
 
-            item = QListWidgetItem(name)
-
-            item.setFlags(
-                item.flags() | Qt.ItemIsUserCheckable
+            check_item = QTableWidgetItem()
+            check_item.setFlags(
+                Qt.ItemIsUserCheckable | Qt.ItemIsEnabled
             )
-
-            item.setCheckState(
+            check_item.setCheckState(
                 Qt.Checked
                 if name in checked_set
                 else Qt.Unchecked
             )
+            self.roi_checklist.setItem(row, 0, check_item)
 
-            self.roi_checklist.addItem(item)
+            name_item = QTableWidgetItem(name)
+            name_item.setFlags(
+                name_item.flags() & ~Qt.ItemIsEditable
+            )
+            self.roi_checklist.setItem(row, 1, name_item)
+
+            threshold_input = QLineEdit()
+            threshold_input.setPlaceholderText("varsayılan")
+
+            if name in thresholds:
+                threshold_input.setText(str(thresholds[name]))
+
+            self.roi_checklist.setCellWidget(row, 2, threshold_input)
 
         self.roi_checklist.blockSignals(False)
 
@@ -313,19 +362,47 @@ class ModelPage(QWidget):
 
         checked = []
 
-        for i in range(self.roi_checklist.count()):
+        for row in range(self.roi_checklist.rowCount()):
 
-            item = self.roi_checklist.item(i)
+            check_item = self.roi_checklist.item(row, 0)
+            name_item = self.roi_checklist.item(row, 1)
 
-            if item.checkState() == Qt.Checked:
-
-                checked.append(item.text())
+            if (
+                check_item is not None
+                and name_item is not None
+                and check_item.checkState() == Qt.Checked
+            ):
+                checked.append(name_item.text())
 
         return checked
 
+    def get_roi_thresholds(self) -> dict:
+
+        thresholds = {}
+
+        for row in range(self.roi_checklist.rowCount()):
+
+            name_item = self.roi_checklist.item(row, 1)
+            widget = self.roi_checklist.cellWidget(row, 2)
+
+            if name_item is None or widget is None:
+                continue
+
+            text = widget.text().strip()
+
+            if not text:
+                continue
+
+            try:
+                thresholds[name_item.text()] = float(text)
+            except ValueError:
+                continue
+
+        return thresholds
+
     def clear_roi_checklist(self):
 
-        self.roi_checklist.clear()
+        self.roi_checklist.setRowCount(0)
 
         self._sync_preview_colors()
 

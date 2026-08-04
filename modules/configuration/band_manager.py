@@ -5,6 +5,9 @@ import shutil
 from pathlib import Path
 
 from .band import Band
+from modules.utils.logger import get_logger
+
+app_logger = get_logger()
 
 
 class BandManager:
@@ -29,7 +32,17 @@ class BandManager:
 
             try:
                 bands.append(self.load_band(folder.name))
-            except Exception:
+            except Exception as e:
+
+                # Bozuk/okunamayan band klasörü listeden sessizce
+                # düşmesin - en azından log'a düşsün ki fark edilsin
+                # (aksi halde bir band aniden kaybolmuş gibi görünür).
+                app_logger.error(
+                    "Band yüklenemedi, atlanıyor: %s (%s)",
+                    folder.name,
+                    e
+                )
+
                 continue
 
         return bands

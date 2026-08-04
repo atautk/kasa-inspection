@@ -125,6 +125,121 @@ def test_single_marker_also_counts_as_total_loss():
     assert result["frame_corners"] is None
 
 
+def test_first_frame_is_not_smoothed():
+
+    engine = LocalizationEngine()
+
+    result = engine.update(make_markers([0, 1, 2, 3]))
+
+    expected = np.float32([
+        make_marker(0).corners[0],
+        make_marker(1).corners[1],
+        make_marker(2).corners[3],
+        make_marker(3).corners[2]
+    ])
+
+    np.testing.assert_array_equal(result["frame_corners"], expected)
+
+
+def test_second_frame_blends_toward_new_position_not_snap():
+    """
+    Stabil takip: ikinci karede pozisyon aniden sıçramamalı, önceki
+    kare ile yeni ham okuma arasında bir yerde olmalı (EMA yumuşatma).
+    """
+
+    engine = LocalizationEngine()
+
+    first = engine.update(make_markers([0, 1, 2, 3]))
+
+    # ikinci karede markerlar biraz kaymış gibi davran (ayni id'ler,
+    # farkli piksel konumlari ureten sahte bir marker seti)
+    shifted = {
+        i: make_marker(i)
+        for i in [0, 1, 2, 3]
+    }
+
+    for marker in shifted.values():
+        marker.corners = marker.corners + 100.0
+
+    second = engine.update(shifted)
+
+    first_corner = first["frame_corners"][0]
+    raw_new_corner = shifted[0].corners[0]
+    smoothed_corner = second["frame_corners"][0]
+
+    # yumuşatılmış değer, eski konum ile yeni ham konum arasında
+    assert first_corner[0] < smoothed_corner[0] < raw_new_corner[0]
+
+
+def test_normal_mode_is_not_settled_immediately_after_reacquiring():
+
+    engine = LocalizationEngine()
+
+    engine.update(make_markers([0, 1, 2, 3]))
+    engine.update({})  # tamamen kayboldu
+
+    result = engine.update(make_markers([0, 1, 2, 3]))  # geri geldi
+
+    assert result["mode"] == "NORMAL"
+    assert result["settled"] is False
+
+
+def test_normal_mode_settles_after_enough_consecutive_frames():
+
+    engine = LocalizationEngine()
+
+    engine.update({})
+
+    result = None
+
+    for _ in range(LocalizationEngine.SETTLE_FRAMES):
+        result = engine.update(make_markers([0, 1, 2, 3]))
+
+    assert result["settled"] is True
+
+
+def test_settle_streak_resets_on_any_non_normal_frame():
+
+    engine = LocalizationEngine()
+
+    engine.update(make_markers([0, 1, 2, 3]))
+    engine.update(make_markers([0, 1, 2, 3]))
+
+    # bir kare icin marker sayisi dusuyor (RECOVERY) - streak sifirlanmali
+    engine.update(make_markers([0, 1, 2]))
+
+    result = engine.update(make_markers([0, 1, 2, 3]))
+
+    assert result["settled"] is False
+
+
+def test_smoothing_resets_after_total_loss():
+    """
+    Kasa tamamen kaybolup farklı bir konumda geri geldiğinde, yeni
+    konum eski (kaybolmadan önceki) konuma doğru yumuşatılmamalı.
+    """
+
+    engine = LocalizationEngine()
+
+    engine.update(make_markers([0, 1, 2, 3]))
+    engine.update({})  # FAIL - hafıza temizlenmeli
+
+    far_markers = {i: make_marker(i) for i in [0, 1, 2, 3]}
+    for marker in far_markers.values():
+        marker.corners = marker.corners + 1000.0
+
+    result = engine.update(far_markers)
+
+    expected = np.float32([
+        far_markers[0].corners[0],
+        far_markers[1].corners[1],
+        far_markers[2].corners[3],
+        far_markers[3].corners[2]
+    ])
+
+    np.testing.assert_array_equal(result["frame_corners"], expected)
+
+
 def test_reacquiring_after_total_loss_does_not_use_pre_loss_geometry():
     """
     Kasa tamamen kaybolduktan sonra (FAIL) geri geldiğinde, henüz

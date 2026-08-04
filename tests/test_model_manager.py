@@ -37,6 +37,46 @@ def test_save_and_load_roundtrip_preserves_expected_rois(manager, band):
     assert reloaded.name == "Clio"
 
 
+def test_create_model_starts_with_no_threshold_overrides(manager, band):
+
+    model = manager.create_model(band, "Clio")
+
+    assert model.roi_thresholds == {}
+
+
+def test_save_and_load_roundtrip_preserves_roi_thresholds(manager, band):
+
+    model = manager.create_model(band, "Clio")
+
+    model.roi_thresholds = {"G01": 12.5, "G03": 1.0}
+    manager.save_model(band, model)
+
+    reloaded = manager.load_model(band, model.id)
+
+    assert reloaded.roi_thresholds == {"G01": 12.5, "G03": 1.0}
+
+
+def test_load_model_without_roi_thresholds_field_defaults_to_empty(
+    manager, band
+):
+
+    # Bu alan eklenmeden önce kaydedilmiş eski bir model.json'u simüle et
+    import json
+
+    file = band.models / "eski.json"
+    file.write_text(
+        json.dumps({
+            "id": "eski", "name": "Eski Model", "version": "1.0",
+            "expected_rois": ["G01"]
+        }),
+        encoding="utf-8"
+    )
+
+    model = manager.load_model(band, "eski")
+
+    assert model.roi_thresholds == {}
+
+
 def test_load_missing_model_raises(manager, band):
 
     with pytest.raises(FileNotFoundError):
