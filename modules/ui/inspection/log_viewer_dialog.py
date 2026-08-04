@@ -18,17 +18,23 @@ from PySide6.QtWidgets import (
     QFrame,
     QSizePolicy,
     QMessageBox,
-    QFileDialog
+    QFileDialog,
+    QComboBox,
+    QStackedWidget,
+    QScrollArea
 )
 from PySide6.QtGui import QImage, QPixmap, QColor
 from PySide6.QtCore import Qt, Signal
 
 from .image_preview_dialog import ImagePreviewDialog
 from ..common.trend_chart_widget import TrendChartWidget
+from ..common.pie_chart_widget import PieChartWidget
+from ..common.horizontal_bar_chart_widget import HorizontalBarChartWidget
 from ..window_utils import restore_or_center, save_geometry
 from modules.configuration.inspection_log_exporter import InspectionLogExporter
 from modules.configuration.backup_manager import BackupManager
 from modules.utils.logger import get_logger
+from modules.utils import accessibility_settings as a11y
 
 app_logger = get_logger()
 
@@ -201,15 +207,42 @@ class LogViewerDialog(QDialog):
         stats_page = QWidget()
         stats_layout = QVBoxLayout(stats_page)
 
-        self.summary_label = QLabel("")
-        stats_layout.addWidget(self.summary_label)
+        summary_row = QHBoxLayout()
 
-        stats_layout.addWidget(QLabel("Günlük NG Oranı Trendi (son 30 gün):"))
+        self.summary_label = QLabel("")
+        summary_row.addWidget(self.summary_label, stretch=1)
+
+        stats_layout.addLayout(summary_row)
+
+        overview_row = QHBoxLayout()
+
+        self.overview_pie_chart = PieChartWidget()
+        overview_row.addWidget(self.overview_pie_chart, stretch=1)
+
+        trend_column = QVBoxLayout()
+        trend_column.addWidget(
+            QLabel("Günlük NG Oranı Trendi (son 30 gün):")
+        )
 
         self.trend_chart = TrendChartWidget()
-        stats_layout.addWidget(self.trend_chart)
+        trend_column.addWidget(self.trend_chart)
 
-        stats_layout.addWidget(QLabel("Model Bazında:"))
+        overview_row.addLayout(trend_column, stretch=2)
+
+        stats_layout.addLayout(overview_row)
+
+        # ---------- Model Bazında ----------
+
+        model_header_row = QHBoxLayout()
+        model_header_row.addWidget(QLabel("Model Bazında:"))
+        model_header_row.addStretch()
+        model_header_row.addWidget(QLabel("Gösterim:"))
+
+        self.model_view_combo = QComboBox()
+        self.model_view_combo.addItems(["Tablo", "Çubuk Grafik"])
+        model_header_row.addWidget(self.model_view_combo)
+
+        stats_layout.addLayout(model_header_row)
 
         self.model_stats_table = QTableWidget()
         self.model_stats_table.setColumnCount(4)
@@ -223,9 +256,35 @@ class LogViewerDialog(QDialog):
         self.model_stats_table.setEditTriggers(
             QTableWidget.NoEditTriggers
         )
-        stats_layout.addWidget(self.model_stats_table)
 
-        stats_layout.addWidget(QLabel("ROI Bazında (en çok NG üstte):"))
+        self.model_bar_chart = HorizontalBarChartWidget()
+
+        model_chart_scroll = QScrollArea()
+        model_chart_scroll.setWidgetResizable(True)
+        model_chart_scroll.setWidget(self.model_bar_chart)
+
+        self.model_view_stack = QStackedWidget()
+        self.model_view_stack.addWidget(self.model_stats_table)
+        self.model_view_stack.addWidget(model_chart_scroll)
+
+        self.model_view_combo.currentIndexChanged.connect(
+            self.model_view_stack.setCurrentIndex
+        )
+
+        stats_layout.addWidget(self.model_view_stack)
+
+        # ---------- ROI Bazında ----------
+
+        roi_header_row = QHBoxLayout()
+        roi_header_row.addWidget(QLabel("ROI Bazında (en çok NG üstte):"))
+        roi_header_row.addStretch()
+        roi_header_row.addWidget(QLabel("Gösterim:"))
+
+        self.roi_view_combo = QComboBox()
+        self.roi_view_combo.addItems(["Tablo", "Çubuk Grafik"])
+        roi_header_row.addWidget(self.roi_view_combo)
+
+        stats_layout.addLayout(roi_header_row)
 
         self.roi_stats_table = QTableWidget()
         self.roi_stats_table.setColumnCount(4)
@@ -239,7 +298,22 @@ class LogViewerDialog(QDialog):
         self.roi_stats_table.setEditTriggers(
             QTableWidget.NoEditTriggers
         )
-        stats_layout.addWidget(self.roi_stats_table)
+
+        self.roi_bar_chart = HorizontalBarChartWidget()
+
+        roi_chart_scroll = QScrollArea()
+        roi_chart_scroll.setWidgetResizable(True)
+        roi_chart_scroll.setWidget(self.roi_bar_chart)
+
+        self.roi_view_stack = QStackedWidget()
+        self.roi_view_stack.addWidget(self.roi_stats_table)
+        self.roi_view_stack.addWidget(roi_chart_scroll)
+
+        self.roi_view_combo.currentIndexChanged.connect(
+            self.roi_view_stack.setCurrentIndex
+        )
+
+        stats_layout.addWidget(self.roi_view_stack)
 
         self.tabs.addTab(stats_page, "İstatistikler")
 
@@ -426,11 +500,29 @@ class LogViewerDialog(QDialog):
             f"NG: {ng_count}  |  NG Oranı: %{ng_ratio:.1f}"
         )
 
+        self.overview_pie_chart.set_data([
+            {
+                "label": "OK",
+                "value": ok_count,
+                "color": QColor(*a11y.get_ok_color_rgb())
+            },
+            {
+                "label": "NG",
+                "value": ng_count,
+                "color": QColor(*a11y.get_ng_color_rgb())
+            }
+        ])
+
         self.trend_chart.set_data(
             self.inspection_logger.compute_daily_trend(30)
         )
 
         self._fill_stats_table(self.model_stats_table, stats["by_model"])
+
+        self.model_bar_chart.set_data([
+            {"label": name, "ok": counts["ok"], "ng": counts["ng"]}
+            for name, counts in sorted(stats["by_model"].items())
+        ])
 
         roi_items = sorted(
             stats["by_roi"].items(),
@@ -443,6 +535,11 @@ class LogViewerDialog(QDialog):
             dict(roi_items),
             preserve_order=True
         )
+
+        self.roi_bar_chart.set_data([
+            {"label": name, "ok": counts["ok"], "ng": counts["ng"]}
+            for name, counts in roi_items
+        ])
 
     # -------------------------------------------------
 
