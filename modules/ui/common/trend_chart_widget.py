@@ -2,6 +2,8 @@ from PySide6.QtWidgets import QWidget, QSizePolicy
 from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtCore import Qt, QRectF
 
+from modules.utils import accessibility_settings as a11y
+
 
 class TrendChartWidget(QWidget):
     """
@@ -112,10 +114,12 @@ class TrendChartWidget(QWidget):
                 bar_height
             )
 
-            color = (
-                QColor(120, 200, 120)
-                if ratio == 0
-                else QColor(220, 80, 80)
+            color = QColor(
+                *(
+                    a11y.get_ok_color_rgb()
+                    if ratio == 0
+                    else a11y.get_ng_color_rgb()
+                )
             )
 
             painter.fillRect(bar_rect, color)

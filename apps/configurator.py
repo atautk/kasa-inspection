@@ -9,11 +9,14 @@ from PySide6.QtWidgets import QApplication, QDialog
 from modules.ui.configurator.main_window import MainWindow
 from modules.ui.common.login_dialog import LoginDialog
 from modules.configuration.operator_manager import OperatorManager
+from modules.utils import accessibility_settings as a11y
 
 
 def main():
 
     app = QApplication(sys.argv)
+
+    a11y.apply_ui_scale(app)
 
     operator_manager = OperatorManager(
         ROOT / "configuration" / "operators.json"

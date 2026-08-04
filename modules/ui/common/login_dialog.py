@@ -53,11 +53,12 @@ class LoginDialog(QDialog):
 
         button_row = QHBoxLayout()
 
-        self.login_button = QPushButton("Giriş Yap")
+        self.login_button = QPushButton("&Giriş Yap")
+        self.login_button.setDefault(True)
         self.login_button.clicked.connect(self._on_login_clicked)
         button_row.addWidget(self.login_button)
 
-        self.add_operator_button = QPushButton("Yeni Operatör Ekle")
+        self.add_operator_button = QPushButton("&Yeni Operatör Ekle")
         self.add_operator_button.clicked.connect(
             self._on_add_operator_clicked
         )

@@ -17,6 +17,8 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QImage, QPixmap, QColor
 from PySide6.QtCore import Qt
 
+from modules.utils import accessibility_settings as a11y
+
 
 class InspectionPage(QWidget):
     """
@@ -108,7 +110,7 @@ class InspectionPage(QWidget):
 
         selection_row.addStretch()
 
-        self.start_button = QPushButton("Başlat")
+        self.start_button = QPushButton("&Başlat")
         self.start_button.setMinimumHeight(36)
         self.start_button.setStyleSheet("font-weight: bold;")
         selection_row.addWidget(self.start_button)
@@ -120,15 +122,15 @@ class InspectionPage(QWidget):
         tools_group = QGroupBox("Araçlar")
         tools_row = QHBoxLayout(tools_group)
 
-        self.save_reference_button = QPushButton("Reference Kaydet")
+        self.save_reference_button = QPushButton("&Reference Kaydet")
         tools_row.addWidget(self.save_reference_button)
 
-        self.history_button = QPushButton("Geçmiş")
+        self.history_button = QPushButton("&Geçmiş")
         tools_row.addWidget(self.history_button)
 
         tools_row.addStretch()
 
-        self.debug_button = QPushButton("Debug Göster")
+        self.debug_button = QPushButton("&Debug Göster")
         tools_row.addWidget(self.debug_button)
 
         root.addWidget(tools_group)
@@ -257,7 +259,13 @@ class InspectionPage(QWidget):
 
             ok = bool(data.get("ok", False))
 
-            color = QColor(200, 255, 200) if ok else QColor(255, 200, 200)
+            color = QColor(
+                *(
+                    a11y.get_ok_color_light_rgb()
+                    if ok
+                    else a11y.get_ng_color_light_rgb()
+                )
+            )
 
             values = [
                 roi_name,
@@ -322,6 +330,13 @@ class InspectionPage(QWidget):
     # -------------------------------------------------
 
     def show_ng_alert(self):
+
+        r, g, b = a11y.get_ng_color_rgb()
+
+        self.ng_banner.setStyleSheet(
+            f"background-color: rgb({r},{g},{b}); color: white; "
+            "font-size: 22px; font-weight: bold; padding: 10px;"
+        )
 
         self.ng_banner.show()
 

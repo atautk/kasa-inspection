@@ -306,7 +306,7 @@ class InspectionUIController:
         self.camera_connected = True
         self.camera_failure_count = 0
 
-        self.page.set_start_button_text("Durdur")
+        self.page.set_start_button_text("&Durdur")
         self.page.enable_selection(False)
         self.page.set_status("CONNECTED")
 
@@ -483,7 +483,7 @@ class InspectionUIController:
         self.camera_connected = True
         self.camera_failure_count = 0
 
-        self.page.set_start_button_text("Başlat")
+        self.page.set_start_button_text("&Başlat")
         self.page.enable_selection(True)
         self.page.set_status("Durduruldu")
         self.page.clear_image()
@@ -494,7 +494,7 @@ class InspectionUIController:
         if self.debug_dialog is not None:
             self.debug_dialog.hide()
             self.debug_enabled = False
-            self.page.set_debug_button_text("Debug Göster")
+            self.page.set_debug_button_text("&Debug Göster")
 
     # -------------------------------------------------
     # Reference Kaydet
@@ -549,23 +549,23 @@ class InspectionUIController:
             self.debug_dialog.show()
 
             self.debug_enabled = True
-            self.page.set_debug_button_text("Debug Gizle")
+            self.page.set_debug_button_text("&Debug Gizle")
 
             return
 
         if self.debug_dialog.isVisible():
             self.debug_dialog.hide()
             self.debug_enabled = False
-            self.page.set_debug_button_text("Debug Göster")
+            self.page.set_debug_button_text("&Debug Göster")
         else:
             self.debug_dialog.show()
             self.debug_enabled = True
-            self.page.set_debug_button_text("Debug Gizle")
+            self.page.set_debug_button_text("&Debug Gizle")
 
     def _on_debug_dialog_closed(self):
 
         self.debug_enabled = False
-        self.page.set_debug_button_text("Debug Göster")
+        self.page.set_debug_button_text("&Debug Göster")
 
     # -------------------------------------------------
     # Geçmiş

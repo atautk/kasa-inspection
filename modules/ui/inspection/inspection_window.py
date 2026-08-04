@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import QMainWindow
 
 from .inspection_page import InspectionPage
+from ..common.accessibility_dialog import AccessibilityDialog
 
 from ..window_utils import restore_or_center, save_geometry
 
@@ -22,6 +23,26 @@ class InspectionWindow(QMainWindow):
         self.setCentralWidget(self.inspection_page)
 
         self.close_callback = None
+
+        self._build_menu()
+
+    # -------------------------------------------------
+
+    def _build_menu(self):
+
+        view_menu = self.menuBar().addMenu("&Görünüm")
+
+        accessibility_action = view_menu.addAction(
+            "&Erişebilirlik Ayarları..."
+        )
+        accessibility_action.triggered.connect(
+            self._open_accessibility_dialog
+        )
+
+    def _open_accessibility_dialog(self):
+
+        dialog = AccessibilityDialog(self)
+        dialog.exec()
 
     # -------------------------------------------------
 

@@ -4,6 +4,8 @@ import os
 import uuid
 import numpy as np
 
+from modules.utils import accessibility_settings as a11y
+
 
 class ROIManager:
 
@@ -363,11 +365,11 @@ class ROIManager:
             if name in results:
 
                 if results[name]["ok"]:
-                    color = (0, 255, 0)
+                    color = a11y.get_ok_color_bgr()
                     text = f"{name} OK"
 
                 else:
-                    color = (0, 0, 255)
+                    color = a11y.get_ng_color_bgr()
                     text = f"{name} NG"
 
             cv2.polylines(

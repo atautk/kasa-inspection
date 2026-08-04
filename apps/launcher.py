@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt
 
 from modules.ui.window_utils import restore_or_center, save_geometry
+from modules.utils import accessibility_settings as a11y
 
 SETTINGS_KEY = "launcher"
 
@@ -76,6 +77,8 @@ class LauncherWindow(QWidget):
 def main():
 
     app = QApplication(sys.argv)
+
+    a11y.apply_ui_scale(app)
 
     window = LauncherWindow()
     window.show()

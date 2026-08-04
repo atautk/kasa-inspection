@@ -8,6 +8,7 @@ from .reference_page import ReferencePage
 from .roi_page import ROIPage
 from .model_page import ModelPage
 from .test_runner_page import TestRunnerPage
+from ..common.accessibility_dialog import AccessibilityDialog
 
 from ..window_utils import restore_or_center, save_geometry
 
@@ -45,6 +46,26 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.tabs)
 
         self.close_callback = None
+
+        self._build_menu()
+
+    # -------------------------------------------------
+
+    def _build_menu(self):
+
+        view_menu = self.menuBar().addMenu("&Görünüm")
+
+        accessibility_action = view_menu.addAction(
+            "&Erişebilirlik Ayarları..."
+        )
+        accessibility_action.triggered.connect(
+            self._open_accessibility_dialog
+        )
+
+    def _open_accessibility_dialog(self):
+
+        dialog = AccessibilityDialog(self)
+        dialog.exec()
 
     # -------------------------------------------------
 
