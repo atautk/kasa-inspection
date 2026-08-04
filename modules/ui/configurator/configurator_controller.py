@@ -32,6 +32,7 @@ from modules.core.aruco_detector import ArucoDetector
 from modules.core.localization import LocalizationEngine
 from modules.core.reference_frame import ReferenceFrame
 from modules.core.frame_processor import FrameProcessor
+from modules.core.roi_auto_detector import ROIAutoDetector
 
 app_logger = get_logger()
 
@@ -60,6 +61,7 @@ class ConfiguratorController:
         self.aruco = ArucoDetector()
         self.localizer = LocalizationEngine()
         self.reference_frame = ReferenceFrame()
+        self.roi_auto_detector = ROIAutoDetector()
 
         self.frame_processor = FrameProcessor(
             self.aruco,
@@ -151,6 +153,10 @@ class ConfiguratorController:
 
         roi_page.save_button.clicked.connect(
             self.save_rois
+        )
+
+        roi_page.auto_detect_button.clicked.connect(
+            self.auto_detect_rois
         )
 
         model_page = self.window.model_page
@@ -835,6 +841,74 @@ class ConfiguratorController:
 
             f"{len(rois)} ROI roi.json dosyasına kaydedildi."
 
+        )
+
+    # -------------------------------------------------
+
+    def auto_detect_rois(self):
+
+        if self.current_band is None:
+            return
+
+        if not self.reference_manager.exists(self.current_band):
+
+            QMessageBox.warning(
+                self.window,
+                "Uyarı",
+                "Önce Reference sekmesinden fotoğraf çekin."
+            )
+
+            return
+
+        image = self.reference_manager.load(self.current_band)
+
+        detected = self.roi_auto_detector.detect(image)
+
+        if not detected:
+
+            QMessageBox.information(
+                self.window,
+                "Sonuç Yok",
+                "Otomatik ROI bulunamadı. Kasa gözleri arasında "
+                "belirgin bir çizgi/duvar olması gerekiyor."
+            )
+
+            return
+
+        page = self.window.roi_page
+
+        existing_count = len(page.get_rois())
+
+        if existing_count > 0:
+
+            answer = QMessageBox.question(
+                self.window,
+                "Emin misiniz?",
+                f"Mevcut {existing_count} ROI silinip otomatik "
+                f"bulunan {len(detected)} ROI ile değiştirilecek. "
+                "Devam edilsin mi?"
+            )
+
+            if answer != QMessageBox.Yes:
+                return
+
+        rois = [
+            {"id": "", "name": f"G{i + 1:02d}", "points": points}
+            for i, points in enumerate(detected)
+        ]
+
+        page.load_rois(rois)
+
+        page.set_status(
+            f"{len(rois)} ROI otomatik bulundu. Kontrol edip "
+            "Kaydet'e basın."
+        )
+
+        app_logger.info(
+            "[%s] otomatik ROI bulundu: %s (%d ROI)",
+            self.operator_name,
+            self.current_band.name,
+            len(rois)
         )
 
     # -------------------------------------------------

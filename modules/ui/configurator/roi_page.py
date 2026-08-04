@@ -277,9 +277,10 @@ class ROIPage(QWidget):
         clear()
         set_status(text)
 
-    Controller'ın dinlediği sinyal:
+    Controller'ın dinlediği sinyaller:
 
         save_button.clicked
+        auto_detect_button.clicked
     """
 
     def __init__(self):
@@ -324,6 +325,9 @@ class ROIPage(QWidget):
             self.toggle_drawing_mode
         )
         button_row.addWidget(self.new_roi_button)
+
+        self.auto_detect_button = QPushButton("Otomatik ROI Bul")
+        button_row.addWidget(self.auto_detect_button)
 
         self.delete_button = QPushButton("Sil")
         self.delete_button.clicked.connect(
