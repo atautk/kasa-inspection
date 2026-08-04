@@ -24,11 +24,20 @@ class NGCaptureManager:
         folder = band.root / self.FOLDER_NAME
         folder.mkdir(parents=True, exist_ok=True)
 
-        filename = (
-            datetime.now().strftime("%Y%m%d_%H%M%S_%f") + ".png"
-        )
+        base_name = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
 
-        path = folder / filename
+        # Windows'ta saat çözünürlüğü mikrosaniyeden kaba olabilir;
+        # art arda hızlı çağrılarda aynı damga üretilip önceki NG
+        # fotoğrafının üzerine sessizce yazılmasını önlemek için
+        # çakışma varsa sayaç ekle.
+        path = folder / f"{base_name}.png"
+
+        counter = 1
+
+        while path.exists():
+
+            path = folder / f"{base_name}_{counter}.png"
+            counter += 1
 
         cv2.imwrite(str(path), image)
 

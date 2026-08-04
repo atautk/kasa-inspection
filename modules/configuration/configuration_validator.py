@@ -18,6 +18,8 @@ class ConfigurationValidator:
 
         errors = []
 
+        roi_names = None
+
         # band.json
 
         if not (band.root / "band.json").exists():
@@ -62,6 +64,11 @@ class ConfigurationValidator:
                     )
                 )
 
+                roi_names = {
+                    roi.get("name", "")
+                    for roi in roi_data.get("rois", [])
+                }
+
         # models
 
         models = self.model_manager.list_models(
@@ -74,6 +81,15 @@ class ConfigurationValidator:
                 "Hiç model oluşturulmamış."
             )
 
+        if roi_names is not None:
+
+            errors.extend(
+                self._validate_model_rois(
+                    models,
+                    roi_names
+                )
+            )
+
         return {
 
             "valid": len(errors) == 0,
@@ -81,6 +97,26 @@ class ConfigurationValidator:
             "errors": errors
 
         }
+
+    # -------------------------------------------------
+
+    def _validate_model_rois(self, models, roi_names: set):
+
+        errors = []
+
+        for model in models:
+
+            for roi_name in model.expected_rois:
+
+                if roi_name not in roi_names:
+
+                    errors.append(
+                        f"{model.name}: '{roi_name}' ROI'si "
+                        "roi.json'da bulunamadı (silinmiş/yeniden "
+                        "adlandırılmış olabilir)."
+                    )
+
+        return errors
 
     # -------------------------------------------------
 
