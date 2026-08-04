@@ -5,8 +5,8 @@ from PySide6.QtWidgets import (
     QListWidget,
     QPushButton,
     QLabel,
-    QDoubleSpinBox,
-    QLineEdit
+    QLineEdit,
+    QGroupBox
 )
 
 
@@ -24,16 +24,25 @@ class BandPage(QWidget):
         self.band_list = QListWidget()
         layout.addWidget(self.band_list)
 
+        # ---------- Günlük Kullanım ----------
+
+        daily_row = QHBoxLayout()
+
         self.new_button = QPushButton("Yeni Band")
-        layout.addWidget(self.new_button)
+        daily_row.addWidget(self.new_button)
 
         self.open_button = QPushButton("Bandı Aç")
-        layout.addWidget(self.open_button)
+        daily_row.addWidget(self.open_button)
+
+        layout.addLayout(daily_row)
+
+        # ---------- Yönetim (Doğrulama / Dışa-İçe Aktarma / Operatör) ----------
+
+        management_group = QGroupBox("Yönetim")
+        management_layout = QVBoxLayout(management_group)
 
         self.validate_button = QPushButton("Doğrula")
-        layout.addWidget(self.validate_button)
-
-        # ---------- Dışa / İçe Aktar ----------
+        management_layout.addWidget(self.validate_button)
 
         export_row = QHBoxLayout()
 
@@ -43,61 +52,29 @@ class BandPage(QWidget):
         self.import_button = QPushButton("İçe Aktar")
         export_row.addWidget(self.import_button)
 
-        layout.addLayout(export_row)
+        management_layout.addLayout(export_row)
 
-        # ---------- Eşik Ayarı ----------
+        self.manage_operators_button = QPushButton("Operatörleri Yönet")
+        management_layout.addWidget(self.manage_operators_button)
 
-        threshold_row = QHBoxLayout()
+        layout.addWidget(management_group)
 
-        threshold_row.addWidget(QLabel("Değişim Eşiği (%):"))
+        # ---------- Arduino (Demo/Sunum Amaçlı) ----------
 
-        self.threshold_spinbox = QDoubleSpinBox()
-        self.threshold_spinbox.setRange(0.0, 100.0)
-        self.threshold_spinbox.setDecimals(1)
-        self.threshold_spinbox.setSingleStep(0.1)
-        self.threshold_spinbox.setEnabled(False)
-        threshold_row.addWidget(self.threshold_spinbox)
+        arduino_group = QGroupBox("Arduino Alarm (Demo)")
+        arduino_layout = QHBoxLayout(arduino_group)
 
-        layout.addLayout(threshold_row)
-
-        # ---------- Arduino Ayarı ----------
-
-        arduino_row = QHBoxLayout()
-
-        arduino_row.addWidget(QLabel("Arduino Portu (örn. COM3):"))
+        arduino_layout.addWidget(QLabel("Port (örn. COM3):"))
 
         self.arduino_port_input = QLineEdit()
         self.arduino_port_input.setEnabled(False)
-        arduino_row.addWidget(self.arduino_port_input)
+        arduino_layout.addWidget(self.arduino_port_input)
 
-        layout.addLayout(arduino_row)
+        self.save_arduino_button = QPushButton("Kaydet")
+        self.save_arduino_button.setEnabled(False)
+        arduino_layout.addWidget(self.save_arduino_button)
 
-        self.save_threshold_button = QPushButton("Ayarları Kaydet")
-        self.save_threshold_button.setEnabled(False)
-        layout.addWidget(self.save_threshold_button)
-
-        # ---------- Operatör Yönetimi ----------
-
-        self.add_operator_button = QPushButton("Operatör Ekle")
-        layout.addWidget(self.add_operator_button)
-
-    # -------------------------------------------------
-    # Eşik Kontrolleri
-    # -------------------------------------------------
-
-    def set_threshold(self, value: float):
-
-        self.threshold_spinbox.setValue(value)
-
-    def get_threshold(self) -> float:
-
-        return self.threshold_spinbox.value()
-
-    def enable_threshold_controls(self, enabled: bool):
-
-        self.threshold_spinbox.setEnabled(enabled)
-        self.arduino_port_input.setEnabled(enabled)
-        self.save_threshold_button.setEnabled(enabled)
+        layout.addWidget(arduino_group)
 
     # -------------------------------------------------
     # Arduino Portu
@@ -110,3 +87,8 @@ class BandPage(QWidget):
     def get_arduino_port(self) -> str:
 
         return self.arduino_port_input.text().strip()
+
+    def enable_arduino_controls(self, enabled: bool):
+
+        self.arduino_port_input.setEnabled(enabled)
+        self.save_arduino_button.setEnabled(enabled)

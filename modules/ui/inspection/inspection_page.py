@@ -11,7 +11,8 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QTableWidget,
     QTableWidgetItem,
-    QHeaderView
+    QHeaderView,
+    QGroupBox
 )
 from PySide6.QtGui import QImage, QPixmap, QColor
 from PySide6.QtCore import Qt
@@ -91,7 +92,7 @@ class InspectionPage(QWidget):
         self.disk_warning_banner.hide()
         root.addWidget(self.disk_warning_banner)
 
-        # ---------- Üst Seçim Satırı ----------
+        # ---------- Ana Satır: Ne Çalıştırılacak ----------
 
         selection_row = QHBoxLayout()
 
@@ -108,18 +109,29 @@ class InspectionPage(QWidget):
         selection_row.addStretch()
 
         self.start_button = QPushButton("Başlat")
+        self.start_button.setMinimumHeight(36)
+        self.start_button.setStyleSheet("font-weight: bold;")
         selection_row.addWidget(self.start_button)
 
-        self.save_reference_button = QPushButton("Reference Kaydet")
-        selection_row.addWidget(self.save_reference_button)
+        root.addLayout(selection_row)
 
-        self.debug_button = QPushButton("Debug Göster")
-        selection_row.addWidget(self.debug_button)
+        # ---------- Araçlar: Çalışırken Kullanılanlar ----------
+
+        tools_group = QGroupBox("Araçlar")
+        tools_row = QHBoxLayout(tools_group)
+
+        self.save_reference_button = QPushButton("Reference Kaydet")
+        tools_row.addWidget(self.save_reference_button)
 
         self.history_button = QPushButton("Geçmiş")
-        selection_row.addWidget(self.history_button)
+        tools_row.addWidget(self.history_button)
 
-        root.addLayout(selection_row)
+        tools_row.addStretch()
+
+        self.debug_button = QPushButton("Debug Göster")
+        tools_row.addWidget(self.debug_button)
+
+        root.addWidget(tools_group)
 
         # ---------- Orta Alan (Görüntü + Tablo) ----------
 

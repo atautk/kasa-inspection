@@ -6,7 +6,8 @@ from PySide6.QtWidgets import (
     QComboBox,
     QLineEdit,
     QPushButton,
-    QMessageBox
+    QMessageBox,
+    QInputDialog
 )
 from PySide6.QtCore import Qt
 
@@ -52,6 +53,12 @@ class LoginDialog(QDialog):
         self.login_button.clicked.connect(self._on_login_clicked)
         button_row.addWidget(self.login_button)
 
+        self.add_operator_button = QPushButton("Yeni Operatör Ekle")
+        self.add_operator_button.clicked.connect(
+            self._on_add_operator_clicked
+        )
+        button_row.addWidget(self.add_operator_button)
+
         layout.addLayout(button_row)
 
     # -------------------------------------------------
@@ -71,13 +78,7 @@ class LoginDialog(QDialog):
 
             return
 
-        if self.operator_manager.verify(name, pin):
-
-            self.authenticated_operator = name
-
-            self.accept()
-
-        else:
+        if not self.operator_manager.verify(name, pin):
 
             QMessageBox.warning(
                 self,
@@ -86,3 +87,75 @@ class LoginDialog(QDialog):
             )
 
             self.pin_input.clear()
+
+            return
+
+        if not self.operator_manager.is_approved(name):
+
+            QMessageBox.warning(
+                self,
+                "Onay Bekliyor",
+                f"'{name}' hesabı henüz yönetici onayı bekliyor. "
+                "Onaylanmadan giriş yapılamaz."
+            )
+
+            self.pin_input.clear()
+
+            return
+
+        self.authenticated_operator = name
+
+        self.accept()
+
+    # -------------------------------------------------
+
+    def _on_add_operator_clicked(self):
+
+        name, ok = QInputDialog.getText(
+            self,
+            "Yeni Operatör",
+            "Operatör Adı"
+        )
+
+        if not ok:
+            return
+
+        name = name.strip()
+
+        if name == "":
+            return
+
+        pin, ok = QInputDialog.getText(
+            self,
+            "Yeni Operatör",
+            f"{name} için PIN belirleyin",
+            QLineEdit.Password
+        )
+
+        if not ok or pin == "":
+            return
+
+        try:
+
+            self.operator_manager.create_operator(name, pin)
+
+        except ValueError as e:
+
+            QMessageBox.warning(self, "Hata", str(e))
+
+            return
+
+        self.operator_combo.blockSignals(True)
+        self.operator_combo.clear()
+        self.operator_combo.addItems(
+            self.operator_manager.list_operators()
+        )
+        self.operator_combo.setCurrentText(name)
+        self.operator_combo.blockSignals(False)
+
+        QMessageBox.information(
+            self,
+            "Başarılı",
+            f"{name} operatör olarak eklendi. Giriş yapabilmesi için "
+            "bir yöneticinin onaylaması gerekiyor."
+        )

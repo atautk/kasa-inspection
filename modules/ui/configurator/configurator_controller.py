@@ -5,8 +5,7 @@ from PySide6.QtWidgets import (
     QInputDialog,
     QMessageBox,
     QListWidgetItem,
-    QFileDialog,
-    QLineEdit
+    QFileDialog
 )
 from PySide6.QtCore import Qt, QTimer
 
@@ -16,6 +15,10 @@ from modules.configuration.model_manager import ModelManager
 from modules.configuration.configuration_validator import ConfigurationValidator
 from modules.configuration.band_export_manager import BandExportManager
 from modules.utils.logger import get_logger
+
+from modules.ui.configurator.operator_management_dialog import (
+    OperatorManagementDialog
+)
 
 # modules/ui/configurator/configurator_controller.py -> proje kökü
 ROOT = Path(__file__).resolve().parents[3]
@@ -92,8 +95,8 @@ class ConfiguratorController:
             self.validate_band
         )
 
-        band_page.save_threshold_button.clicked.connect(
-            self.save_threshold
+        band_page.save_arduino_button.clicked.connect(
+            self.save_arduino_settings
         )
 
         band_page.export_button.clicked.connect(
@@ -104,8 +107,8 @@ class ConfiguratorController:
             self.import_band
         )
 
-        band_page.add_operator_button.clicked.connect(
-            self.add_operator
+        band_page.manage_operators_button.clicked.connect(
+            self.open_operator_management
         )
 
         reference_page = self.window.reference_page
@@ -255,9 +258,8 @@ class ConfiguratorController:
         # Models sekmesi şimdilik serbest.
         self.window.tabs.setTabEnabled(3, True)
 
-        page.set_threshold(self.current_band.threshold)
         page.set_arduino_port(self.current_band.arduino_port)
-        page.enable_threshold_controls(True)
+        page.enable_arduino_controls(True)
 
         self.load_reference_tab()
 
@@ -273,24 +275,21 @@ class ConfiguratorController:
 
     # -------------------------------------------------
 
-    def save_threshold(self):
+    def save_arduino_settings(self):
 
         if self.current_band is None:
             return
 
         page = self.window.band_page
 
-        self.current_band.threshold = page.get_threshold()
         self.current_band.arduino_port = page.get_arduino_port()
 
         self.band_manager.save_band(self.current_band)
 
         app_logger.info(
-            "[%s] band ayarları değiştirildi: %s -> eşik %%%.1f, "
-            "arduino portu '%s'",
+            "[%s] arduino portu değiştirildi: %s -> '%s'",
             self.operator_name,
             self.current_band.name,
-            self.current_band.threshold,
             self.current_band.arduino_port
         )
 
@@ -300,8 +299,7 @@ class ConfiguratorController:
 
             "Başarılı",
 
-            f"Eşik değeri %{self.current_band.threshold:.1f} olarak "
-            f"kaydedildi."
+            "Arduino portu kaydedildi."
 
         )
 
@@ -460,60 +458,27 @@ class ConfiguratorController:
     # Operatör Yönetimi
     # -------------------------------------------------
 
-    def add_operator(self):
+    def open_operator_management(self):
 
         if self.operator_manager is None:
             return
 
-        name, ok = QInputDialog.getText(
-            self.window,
-            "Yeni Operatör",
-            "Operatör Adı"
-        )
-
-        if not ok:
-            return
-
-        name = name.strip()
-
-        if name == "":
-            return
-
-        pin, ok = QInputDialog.getText(
-            self.window,
-            "Yeni Operatör",
-            f"{name} için PIN belirleyin",
-            QLineEdit.Password
-        )
-
-        if not ok or pin == "":
-            return
-
-        try:
-
-            self.operator_manager.create_operator(name, pin)
-
-        except ValueError as e:
+        if not self.operator_manager.is_admin(self.operator_name):
 
             QMessageBox.warning(
                 self.window,
-                "Hata",
-                str(e)
+                "Yetkisiz",
+                "Bu işlem için yönetici yetkisi gereklidir."
             )
 
             return
 
-        app_logger.info(
-            "[%s] yeni operatör eklendi: %s",
-            self.operator_name,
-            name
+        dialog = OperatorManagementDialog(
+            self.operator_manager,
+            self.window
         )
 
-        QMessageBox.information(
-            self.window,
-            "Başarılı",
-            f"{name} operatör olarak eklendi."
-        )
+        dialog.exec()
 
     # -------------------------------------------------
     # Reference Sekmesi

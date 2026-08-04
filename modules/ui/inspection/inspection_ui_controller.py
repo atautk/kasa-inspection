@@ -21,7 +21,7 @@ from modules.configuration.inspection_logger import InspectionLogger
 from modules.configuration.ng_capture_manager import NGCaptureManager
 
 from modules.ui.roi_manager import ROIManager
-from modules.ui.debug_view import DebugView
+from modules.ui.inspection.debug_dialog import DebugDialog
 from modules.ui.inspection.log_viewer_dialog import LogViewerDialog
 
 from modules.controllers.inspection_controller import InspectionController
@@ -84,8 +84,7 @@ class InspectionUIController:
         self.last_reconnect_attempt = 0.0
 
         self.debug_enabled = False
-        self.debug_view = DebugView()
-        self.debug_view.disable()
+        self.debug_dialog = None
 
         self.last_tick_time = None
 
@@ -166,6 +165,9 @@ class InspectionUIController:
 
         self.inspection_logger = InspectionLogger(self.current_band)
 
+        if self.debug_dialog is not None:
+            self.debug_dialog.set_threshold(self.current_band.threshold)
+
         self.roi_manager.load(self.current_band.roi)
 
         self.reference_image = self.reference_manager.load(
@@ -197,6 +199,32 @@ class InspectionUIController:
         self.recipe_manager = ModelRecipeAdapter(self.current_model)
 
         self._build_inspection_controller()
+
+    # -------------------------------------------------
+    # Eşik Ayarı (canlı, Debug ile birlikte ayarlanır)
+    # -------------------------------------------------
+
+    def _on_threshold_changed(self, value):
+
+        if self.current_band is None:
+            return
+
+        self.current_band.threshold = value
+
+        self.band_manager.save_band(self.current_band)
+
+        if self.inspection_controller is not None:
+
+            self.inspection_controller.inspection_processor.decision.set_threshold(
+                value
+            )
+
+        app_logger.info(
+            "[%s] eşik canlı değiştirildi: %s -> %%%.1f",
+            self.operator_name,
+            self.current_band.name,
+            value
+        )
 
     def _build_inspection_controller(self):
 
@@ -461,7 +489,10 @@ class InspectionUIController:
         self.page.hide_ng_alert()
         self.last_alert_state = None
 
-        self.debug_view.close()
+        if self.debug_dialog is not None:
+            self.debug_dialog.hide()
+            self.debug_enabled = False
+            self.page.set_debug_button_text("Debug Göster")
 
     # -------------------------------------------------
     # Reference Kaydet
@@ -500,14 +531,39 @@ class InspectionUIController:
 
     def _on_debug_clicked(self):
 
-        self.debug_enabled = not self.debug_enabled
+        if self.debug_dialog is None:
 
-        if self.debug_enabled:
-            self.debug_view.enable()
+            self.debug_dialog = DebugDialog(self.window)
+
+            if self.current_band is not None:
+                self.debug_dialog.set_threshold(self.current_band.threshold)
+
+            self.debug_dialog.threshold_spinbox.valueChanged.connect(
+                self._on_threshold_changed
+            )
+
+            self.debug_dialog.finished.connect(self._on_debug_dialog_closed)
+
+            self.debug_dialog.show()
+
+            self.debug_enabled = True
             self.page.set_debug_button_text("Debug Gizle")
-        else:
-            self.debug_view.disable()
+
+            return
+
+        if self.debug_dialog.isVisible():
+            self.debug_dialog.hide()
+            self.debug_enabled = False
             self.page.set_debug_button_text("Debug Göster")
+        else:
+            self.debug_dialog.show()
+            self.debug_enabled = True
+            self.page.set_debug_button_text("Debug Gizle")
+
+    def _on_debug_dialog_closed(self):
+
+        self.debug_enabled = False
+        self.page.set_debug_button_text("Debug Göster")
 
     # -------------------------------------------------
     # Geçmiş
@@ -739,8 +795,6 @@ class InspectionUIController:
         else:
             self.page.set_status("Kamera bekleniyor / Parça yok")
 
-        if self.debug_enabled:
+        if self.debug_enabled and self.debug_dialog is not None:
 
-            self.debug_view.show(result["debug"])
-
-            cv2.waitKey(1)
+            self.debug_dialog.show_debug(result["debug"])
