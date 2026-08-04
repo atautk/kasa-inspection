@@ -1,5 +1,6 @@
 import time
 import winsound
+from pathlib import Path
 
 import cv2
 
@@ -12,6 +13,7 @@ from modules.core.reference_frame import ReferenceFrame
 from modules.core.inspection_engine import InspectionEngine
 from modules.core.decision_engine import DecisionEngine
 from modules.core.arduino_controller import ArduinoController
+from modules.core.telegram_notifier import TelegramNotifier
 
 from modules.configuration.band_manager import BandManager
 from modules.configuration.model_manager import ModelManager
@@ -20,6 +22,9 @@ from modules.configuration.model_recipe_adapter import ModelRecipeAdapter
 from modules.configuration.inspection_logger import InspectionLogger
 from modules.configuration.ng_capture_manager import NGCaptureManager
 from modules.configuration.configuration_validator import ConfigurationValidator
+from modules.configuration.telegram_settings_manager import (
+    TelegramSettingsManager
+)
 
 from modules.ui.roi_manager import ROIManager
 from modules.ui.inspection.debug_dialog import DebugDialog
@@ -58,6 +63,9 @@ class InspectionUIController:
         self.model_manager = ModelManager()
         self.reference_manager = ReferenceManager()
         self.configuration_validator = ConfigurationValidator()
+        self.telegram_settings_manager = TelegramSettingsManager(
+            Path(band_root) / "telegram_settings.json"
+        )
 
         self.bands = []
         self.models = []
@@ -73,6 +81,7 @@ class InspectionUIController:
         self.inspection_logger = None
         self.ng_capture_manager = NGCaptureManager()
         self.arduino_controller = None
+        self.arduino_was_connected = True
         self.last_alert_state = None
         self.last_disk_check = 0.0
         self.disk_warning_active = False
@@ -346,6 +355,59 @@ class InspectionUIController:
 
         self.timer.start()
 
+    # -------------------------------------------------
+    # Telegram Bildirimleri
+    # -------------------------------------------------
+
+    def _notify_telegram_ng(self, results: dict, image_path):
+
+        settings = self.telegram_settings_manager.load()
+
+        if not settings.notify_on_ng or not settings.is_configured():
+            return
+
+        ng_names = [
+            name for name, data in results.items()
+            if not data.get("ok", True)
+        ]
+
+        band_name = (
+            self.current_band.name
+            if self.current_band is not None
+            else "?"
+        )
+
+        caption = (
+            f"⚠ NG - {band_name}\n"
+            f"Hatalı gözler: {', '.join(ng_names) if ng_names else '-'}"
+        )
+
+        notifier = TelegramNotifier(settings.bot_token, settings.chat_id)
+
+        if image_path:
+            notifier.send_photo_async(image_path, caption=caption)
+        else:
+            notifier.send_message_async(caption)
+
+    def _notify_telegram_disconnect(self, device_name: str):
+
+        settings = self.telegram_settings_manager.load()
+
+        if not settings.notify_on_disconnect or not settings.is_configured():
+            return
+
+        band_name = (
+            self.current_band.name
+            if self.current_band is not None
+            else "?"
+        )
+
+        notifier = TelegramNotifier(settings.bot_token, settings.chat_id)
+
+        notifier.send_message_async(
+            f"🔌 {device_name} bağlantısı koptu - {band_name}"
+        )
+
     def _connect_arduino(self):
 
         if self.arduino_controller is not None:
@@ -434,6 +496,8 @@ class InspectionUIController:
             "Kamera bağlantısı koptu (band=%s)",
             band_name
         )
+
+        self._notify_telegram_disconnect("Kamera")
 
         self.camera_connected = False
         self.last_reconnect_attempt = time.perf_counter()
@@ -747,11 +811,22 @@ class InspectionUIController:
 
         self._check_disk_space()
 
-        if (
-            self.arduino_controller is not None
-            and not self.arduino_controller.is_connected()
-        ):
-            self._attempt_arduino_reconnect()
+        if self.arduino_controller is not None:
+
+            if self.arduino_controller.is_connected():
+
+                self.arduino_was_connected = True
+
+            else:
+
+                if self.arduino_was_connected:
+
+                    app_logger.error("Arduino bağlantısı koptu")
+                    self._notify_telegram_disconnect("Arduino")
+
+                self.arduino_was_connected = False
+
+                self._attempt_arduino_reconnect()
 
         if not self.camera_connected:
             self._attempt_camera_reconnect()
@@ -844,6 +919,8 @@ class InspectionUIController:
                     self.current_band,
                     display
                 )
+
+                self._notify_telegram_ng(result["results"], image_path)
 
             self.inspection_logger.log(
                 result["results"],

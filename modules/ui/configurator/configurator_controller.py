@@ -22,6 +22,12 @@ from modules.ui.configurator.operator_management_dialog import (
     OperatorManagementDialog
 )
 from modules.ui.configurator.audit_log_dialog import AuditLogDialog
+from modules.ui.configurator.telegram_settings_dialog import (
+    TelegramSettingsDialog
+)
+from modules.configuration.telegram_settings_manager import (
+    TelegramSettingsManager
+)
 from modules.utils.logger import LOG_FILE
 from modules.utils.test_runner import TestRunner
 
@@ -66,6 +72,10 @@ class ConfiguratorController:
 
         self.test_runner = TestRunner()
         self.test_runner.finished.connect(self._on_tests_finished)
+
+        self.telegram_settings_manager = TelegramSettingsManager(
+            ROOT / "configuration" / "telegram_settings.json"
+        )
 
         self.frame_processor = FrameProcessor(
             self.aruco,
@@ -137,6 +147,10 @@ class ConfiguratorController:
 
         band_page.audit_log_button.clicked.connect(
             self.open_audit_log
+        )
+
+        band_page.telegram_settings_button.clicked.connect(
+            self.open_telegram_settings
         )
 
         reference_page = self.window.reference_page
@@ -587,6 +601,30 @@ class ConfiguratorController:
             return
 
         dialog = AuditLogDialog(LOG_FILE, self.window)
+
+        dialog.exec()
+
+    # -------------------------------------------------
+
+    def open_telegram_settings(self):
+
+        if self.operator_manager is None:
+            return
+
+        if not self.operator_manager.is_admin(self.operator_name):
+
+            QMessageBox.warning(
+                self.window,
+                "Yetkisiz",
+                "Bu işlem için yönetici yetkisi gereklidir."
+            )
+
+            return
+
+        dialog = TelegramSettingsDialog(
+            self.telegram_settings_manager,
+            self.window
+        )
 
         dialog.exec()
 

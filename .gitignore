@@ -25,5 +25,8 @@ window_settings.ini
 # Operatör listesi ve PIN hash'leri (makineye özel, PIN içerdiği için git'e girmemeli)
 configuration/operators.json
 
+# Telegram bot token'ı (kimlik bilgisi, git'e girmemeli)
+configuration/telegram_settings.json
+
 # Kamera kalibrasyon çıktıları (istersen bunları sonradan ekleyebilirsin)
 # calibration/*.npy

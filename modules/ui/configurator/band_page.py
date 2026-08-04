@@ -60,6 +60,9 @@ class BandPage(QWidget):
         self.audit_log_button = QPushButton("Giriş/Çıkış ve Değişiklik Logu")
         management_layout.addWidget(self.audit_log_button)
 
+        self.telegram_settings_button = QPushButton("Telegram Bildirimleri")
+        management_layout.addWidget(self.telegram_settings_button)
+
         layout.addWidget(management_group)
 
         # ---------- Arduino (Demo/Sunum Amaçlı) ----------
