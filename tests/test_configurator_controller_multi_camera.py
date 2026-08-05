@@ -216,3 +216,85 @@ def test_remove_camera_channel_removes_it_from_targets(controller):
     targets = controller._camera_targets()
 
     assert len(targets) == 1
+
+
+def test_channel_selector_hidden_for_single_camera_band(controller):
+
+    _open_band(controller)
+
+    assert controller.window.reference_page.channel_container.isHidden()
+    assert controller.window.roi_page.channel_container.isHidden()
+
+
+def test_channel_selector_shown_once_extra_channel_added(controller):
+
+    band = _open_band(controller)
+
+    controller.band_manager.add_camera_channel(
+        band, "Yan", camera_index=1
+    )
+    controller._refresh_camera_selectors()
+
+    assert not controller.window.reference_page.channel_container.isHidden()
+    assert not controller.window.roi_page.channel_container.isHidden()
+
+
+def test_band_page_stays_minimal(controller):
+    """
+    Band sekmesi bilerek sade tutuluyor - sadece liste + Yeni Band/
+    Bandı Aç. Doğrulama/Telegram/Kamera Kanalları/Arduino gibi
+    seyrek kullanılan işler MainWindow'daki "Yönetim" menüsünde
+    yaşıyor (bkz. test_management_actions_enabled_only_after_band_open).
+    """
+
+    page = controller.window.band_page
+
+    assert hasattr(page, "band_list")
+    assert hasattr(page, "new_button")
+    assert hasattr(page, "open_button")
+
+    assert not hasattr(page, "settings_tabs")
+    assert not hasattr(page, "camera_channel_list")
+    assert not hasattr(page, "arduino_port_combo")
+
+
+def test_management_actions_enabled_only_after_band_open(controller):
+
+    window = controller.window
+
+    # Band henüz açılmadan kamera kanalı/Arduino menü öğeleri
+    # devre dışı olmalı (bir bant seçilmeden anlamsız).
+    assert not window.camera_channels_action.isEnabled()
+    assert not window.arduino_settings_action.isEnabled()
+
+    _open_band(controller)
+
+    assert window.camera_channels_action.isEnabled()
+    assert window.arduino_settings_action.isEnabled()
+
+
+def test_open_camera_channels_refreshes_selectors_after_dialog_closes(
+    controller, monkeypatch
+):
+
+    band = _open_band(controller)
+
+    def fake_exec(self):
+
+        # Kullanıcı diyalogda bir kanal ekleyip kapatmış gibi davran.
+        controller.band_manager.add_camera_channel(
+            band, "Yan", camera_index=1
+        )
+
+        return 1
+
+    from modules.ui.configurator.camera_channels_dialog import (
+        CameraChannelsDialog
+    )
+
+    monkeypatch.setattr(CameraChannelsDialog, "exec", fake_exec)
+
+    controller.open_camera_channels()
+
+    assert not controller.window.reference_page.channel_container.isHidden()
+    assert not controller.window.roi_page.channel_container.isHidden()

@@ -139,10 +139,12 @@ class InspectionPage(QWidget):
 
         middle_row = QHBoxLayout()
 
+        self._last_frame = None
+
         self.image_label = QLabel("Kamera kapalı")
         self.image_label.setAlignment(Qt.AlignCenter)
         self.image_label.setFrameShape(QFrame.Box)
-        self.image_label.setMinimumSize(640, 480)
+        self.image_label.setMinimumSize(320, 240)
         self.image_label.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Expanding
@@ -219,6 +221,12 @@ class InspectionPage(QWidget):
         if frame is None:
             return
 
+        self._last_frame = frame
+
+        self._render_image(frame)
+
+    def _render_image(self, frame: np.ndarray):
+
         height, width = frame.shape[:2]
 
         rgb = frame[:, :, ::-1].copy()
@@ -242,8 +250,21 @@ class InspectionPage(QWidget):
 
     def clear_image(self):
 
+        self._last_frame = None
+
         self.image_label.clear()
         self.image_label.setText("Kamera kapalı")
+
+    # -------------------------------------------------
+    # Pencere Yeniden Boyutlanınca
+    # -------------------------------------------------
+
+    def resizeEvent(self, event):
+
+        super().resizeEvent(event)
+
+        if self._last_frame is not None:
+            self._render_image(self._last_frame)
 
     # -------------------------------------------------
     # Sonuç Tablosu

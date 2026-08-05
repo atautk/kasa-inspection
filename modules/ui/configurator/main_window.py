@@ -62,6 +62,55 @@ class MainWindow(QMainWindow):
             self._open_accessibility_dialog
         )
 
+        self._build_management_menu()
+
+    # -------------------------------------------------
+
+    def _build_management_menu(self):
+        """
+        Seyrek kullanılan band-yönetimi işleri (doğrulama, dışa/içe
+        aktarma, operatör/log, Telegram, kamera kanalı/Arduino
+        ayarları) burada birer QAction olarak durur. Davranışları
+        ConfiguratorController.connect_signals() tarafından bağlanır -
+        bu sınıf sadece menüyü kurar, hiçbir iş mantığı bilmez.
+        """
+
+        management_menu = self.menuBar().addMenu("&Yönetim")
+
+        self.validate_action = management_menu.addAction("Doğrula")
+        self.export_action = management_menu.addAction("Dışa Aktar...")
+        self.import_action = management_menu.addAction("İçe Aktar...")
+
+        management_menu.addSeparator()
+
+        self.manage_operators_action = management_menu.addAction(
+            "Operatörleri Yönet..."
+        )
+        self.audit_log_action = management_menu.addAction(
+            "Giriş/Çıkış ve Değişiklik Logu..."
+        )
+
+        management_menu.addSeparator()
+
+        self.telegram_settings_action = management_menu.addAction(
+            "Telegram Bildirimleri..."
+        )
+        self.telegram_recipients_action = management_menu.addAction(
+            "Bildirim Alıcıları (Telefon Numarası)..."
+        )
+
+        management_menu.addSeparator()
+
+        self.camera_channels_action = management_menu.addAction(
+            "Kamera Kanallarını Yönet..."
+        )
+        self.camera_channels_action.setEnabled(False)
+
+        self.arduino_settings_action = management_menu.addAction(
+            "Arduino Ayarları..."
+        )
+        self.arduino_settings_action.setEnabled(False)
+
     def _open_accessibility_dialog(self):
 
         dialog = AccessibilityDialog(self)

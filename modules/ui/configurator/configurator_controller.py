@@ -1,8 +1,6 @@
 import json
 from pathlib import Path
 
-from serial.tools import list_ports
-
 from PySide6.QtWidgets import (
     QInputDialog,
     QMessageBox,
@@ -28,6 +26,12 @@ from modules.ui.configurator.telegram_settings_dialog import (
 )
 from modules.ui.configurator.telegram_recipients_dialog import (
     TelegramRecipientsDialog
+)
+from modules.ui.configurator.camera_channels_dialog import (
+    CameraChannelsDialog
+)
+from modules.ui.configurator.arduino_settings_dialog import (
+    ArduinoSettingsDialog
 )
 from modules.configuration.telegram_settings_manager import (
     TelegramSettingsManager
@@ -131,48 +135,40 @@ class ConfiguratorController:
             self.open_band
         )
 
-        band_page.validate_button.clicked.connect(
+        self.window.validate_action.triggered.connect(
             self.validate_band
         )
 
-        band_page.save_arduino_button.clicked.connect(
-            self.save_arduino_settings
-        )
-
-        band_page.refresh_ports_button.clicked.connect(
-            self.refresh_arduino_ports
-        )
-
-        band_page.export_button.clicked.connect(
+        self.window.export_action.triggered.connect(
             self.export_band
         )
 
-        band_page.import_button.clicked.connect(
+        self.window.import_action.triggered.connect(
             self.import_band
         )
 
-        band_page.manage_operators_button.clicked.connect(
+        self.window.manage_operators_action.triggered.connect(
             self.open_operator_management
         )
 
-        band_page.audit_log_button.clicked.connect(
+        self.window.audit_log_action.triggered.connect(
             self.open_audit_log
         )
 
-        band_page.telegram_settings_button.clicked.connect(
+        self.window.telegram_settings_action.triggered.connect(
             self.open_telegram_settings
         )
 
-        band_page.telegram_recipients_button.clicked.connect(
+        self.window.telegram_recipients_action.triggered.connect(
             self.open_telegram_recipients
         )
 
-        band_page.add_camera_channel_button.clicked.connect(
-            self.add_camera_channel
+        self.window.camera_channels_action.triggered.connect(
+            self.open_camera_channels
         )
 
-        band_page.remove_camera_channel_button.clicked.connect(
-            self.remove_camera_channel
+        self.window.arduino_settings_action.triggered.connect(
+            self.open_arduino_settings
         )
 
         reference_page = self.window.reference_page
@@ -382,12 +378,8 @@ class ConfiguratorController:
         # Models sekmesi şimdilik serbest.
         self.window.tabs.setTabEnabled(3, True)
 
-        self.refresh_arduino_ports()
-        page.set_arduino_port(self.current_band.arduino_port)
-        page.enable_arduino_controls(True)
-
-        self.load_camera_channels()
-        page.enable_camera_channel_controls(True)
+        self.window.camera_channels_action.setEnabled(True)
+        self.window.arduino_settings_action.setEnabled(True)
 
         self.load_reference_tab()
 
@@ -403,22 +395,20 @@ class ConfiguratorController:
 
     # -------------------------------------------------
 
-    def refresh_arduino_ports(self):
-
-        ports = [p.device for p in list_ports.comports()]
-
-        self.window.band_page.set_available_ports(ports)
-
-    # -------------------------------------------------
-
-    def save_arduino_settings(self):
+    def open_arduino_settings(self):
 
         if self.current_band is None:
             return
 
-        page = self.window.band_page
+        dialog = ArduinoSettingsDialog(
+            self.current_band.arduino_port,
+            self.window
+        )
 
-        self.current_band.arduino_port = page.get_arduino_port()
+        if dialog.exec() != ArduinoSettingsDialog.Accepted:
+            return
+
+        self.current_band.arduino_port = dialog.get_port()
 
         self.band_manager.save_band(self.current_band)
 
@@ -429,124 +419,39 @@ class ConfiguratorController:
             self.current_band.arduino_port
         )
 
-        QMessageBox.information(
-
-            self.window,
-
-            "Başarılı",
-
-            "Arduino portu kaydedildi."
-
-        )
-
     # -------------------------------------------------
     # Kamera Kanalları (Çoklu Açı)
     # -------------------------------------------------
 
-    def load_camera_channels(self):
-
-        page = self.window.band_page
-
-        page.set_camera_channels([
-            {
-                "id": channel.id,
-                "name": channel.name,
-                "camera_index": channel.camera_index
-            }
-            for channel in self.current_band.cameras
-        ])
-
-    # -------------------------------------------------
-
-    def add_camera_channel(self):
+    def open_camera_channels(self):
 
         if self.current_band is None:
             return
 
-        name, ok = QInputDialog.getText(
-            self.window,
-            "Yeni Kamera Kanalı",
-            "Kanal Adı (ör. Yan, Üst)"
-        )
+        before = {channel.id for channel in self.current_band.cameras}
 
-        if not ok:
-            return
-
-        name = name.strip()
-
-        if name == "":
-            return
-
-        camera_index, ok = QInputDialog.getInt(
-            self.window,
-            "Yeni Kamera Kanalı",
-            "Kamera İndeksi",
-            0,
-            0,
-            16
-        )
-
-        if not ok:
-            return
-
-        self.band_manager.add_camera_channel(
+        dialog = CameraChannelsDialog(
+            self.band_manager,
             self.current_band,
-            name,
-            camera_index
+            self.window
         )
 
-        app_logger.info(
-            "[%s] yeni kamera kanalı eklendi: %s / %s (kamera %d)",
-            self.operator_name,
-            self.current_band.name,
-            name,
-            camera_index
-        )
+        dialog.exec()
 
-        self.load_camera_channels()
-        self._refresh_camera_selectors()
+        after = {channel.id for channel in self.current_band.cameras}
 
-    # -------------------------------------------------
+        if before != after:
 
-    def remove_camera_channel(self):
-
-        page = self.window.band_page
-
-        channel_id = page.get_selected_camera_channel_id()
-
-        if channel_id is None:
-
-            QMessageBox.warning(
-                self.window,
-                "Uyarı",
-                "Lütfen silinecek bir kamera kanalı seçin."
+            app_logger.info(
+                "[%s] kamera kanalları güncellendi: %s (%d kanal)",
+                self.operator_name,
+                self.current_band.name,
+                len(self.current_band.cameras)
             )
 
-            return
-
-        answer = QMessageBox.question(
-            self.window,
-            "Emin misiniz?",
-            "Kamera kanalı silinecek (fotoğraf/ROI dosyaları diskte "
-            "kalır ama band artık onları kullanmaz). Devam edilsin mi?"
-        )
-
-        if answer != QMessageBox.Yes:
-            return
-
-        self.band_manager.remove_camera_channel(
-            self.current_band,
-            channel_id
-        )
-
-        app_logger.info(
-            "[%s] kamera kanalı silindi: %s / %s",
-            self.operator_name,
-            self.current_band.name,
-            channel_id
-        )
-
-        self.load_camera_channels()
+        # Reference/ROI sekmelerindeki kanal seçim kutuları, band
+        # kapanmadan önceki kanal listesini gösteriyor olabilir -
+        # pencere kapandığında her durumda tazeleriz.
         self._refresh_camera_selectors()
 
     # -------------------------------------------------

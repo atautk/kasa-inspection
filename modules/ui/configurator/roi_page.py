@@ -300,17 +300,29 @@ class ROIPage(QWidget):
         self.temp_markers = []
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
         # ---------- Kamera Kanalı Seçimi ----------
+        # (Bandın tek kamerası varsa bu satır gizlenir - set_channels().)
 
-        channel_row = QHBoxLayout()
+        self.channel_container = QWidget()
 
-        channel_row.addWidget(QLabel("Kamera Kanalı:"))
+        channel_row = QHBoxLayout(self.channel_container)
+        channel_row.setContentsMargins(0, 0, 0, 0)
+
+        channel_row.addWidget(QLabel("Düzenlenen Kamera:"))
 
         self.channel_combo = QComboBox()
+        self.channel_combo.setToolTip(
+            "Bu band birden fazla kameraya sahip. Hangi kameranın "
+            "ROI'lerini düzenlediğinizi buradan seçin."
+        )
         channel_row.addWidget(self.channel_combo, stretch=1)
 
-        layout.addLayout(channel_row)
+        layout.addWidget(self.channel_container)
+
+        self.channel_container.setVisible(False)
 
         # ---------- Bilgi ----------
 
@@ -327,7 +339,7 @@ class ROIPage(QWidget):
         # ---------- Görüntü ----------
 
         self.view = ROIGraphicsView(self)
-        self.view.setMinimumSize(800, 600)
+        self.view.setMinimumSize(400, 300)
         layout.addWidget(self.view)
 
         # ---------- Butonlar ----------
@@ -569,7 +581,9 @@ class ROIPage(QWidget):
         """
         items: [(etiket, channel_id_ya_da_None), ...]
         İlk eleman her zaman birincil kamerayı (channel_id=None)
-        temsil etmeli.
+        temsil etmeli. Sadece birincil varsa (tek eleman), seçim
+        kutusu tek kameralı bandlarda kafa karıştırmasın diye
+        tamamen gizlenir.
         """
 
         self.channel_combo.blockSignals(True)
@@ -580,6 +594,8 @@ class ROIPage(QWidget):
             self.channel_combo.addItem(label, channel_id)
 
         self.channel_combo.blockSignals(False)
+
+        self.channel_container.setVisible(len(items) > 1)
 
     def get_selected_channel_id(self):
 

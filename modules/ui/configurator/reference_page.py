@@ -48,28 +48,40 @@ class ReferencePage(QWidget):
         super().__init__()
 
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
         # ---------- Kamera Kanalı Seçimi ----------
         # (Aynı kasayı farklı açılardan izleyen ek kameralar varsa,
-        # hangisi için fotoğraf çekildiğini seçmeye yarar. Birincil
-        # kamera dışında ek kanal yoksa tek seçenek "Birincil Kamera"
-        # olur ve bu satır sıradan kullanımı etkilemez.)
+        # hangisi için fotoğraf çekildiğini seçmeye yarar. Bandın tek
+        # kamerası varsa bu satır tamamen gizlenir - bkz. set_channels().)
 
-        channel_row = QHBoxLayout()
+        self.channel_container = QWidget()
 
-        channel_row.addWidget(QLabel("Kamera Kanalı:"))
+        channel_row = QHBoxLayout(self.channel_container)
+        channel_row.setContentsMargins(0, 0, 0, 0)
+
+        channel_row.addWidget(QLabel("Fotoğrafı Çekilecek Kamera:"))
 
         self.channel_combo = QComboBox()
+        self.channel_combo.setToolTip(
+            "Bu band birden fazla kameraya sahip. Hangi kameranın "
+            "referans fotoğrafını düzenlediğinizi buradan seçin."
+        )
         channel_row.addWidget(self.channel_combo, stretch=1)
 
-        layout.addLayout(channel_row)
+        layout.addWidget(self.channel_container)
+
+        self.channel_container.setVisible(False)
 
         # ---------- Preview ----------
+
+        self._last_frame = None
 
         self.preview_label = QLabel("Kamera kapalı")
         self.preview_label.setAlignment(Qt.AlignCenter)
         self.preview_label.setFrameShape(QFrame.Box)
-        self.preview_label.setMinimumSize(640, 480)
+        self.preview_label.setMinimumSize(320, 240)
         self.preview_label.setSizePolicy(
             QSizePolicy.Expanding,
             QSizePolicy.Expanding
@@ -116,6 +128,12 @@ class ReferencePage(QWidget):
         if frame is None:
             return
 
+        self._last_frame = frame
+
+        self._render_preview(frame)
+
+    def _render_preview(self, frame: np.ndarray):
+
         height, width = frame.shape[:2]
 
         # frame BGR (OpenCV formatı) olarak varsayılır.
@@ -145,8 +163,21 @@ class ReferencePage(QWidget):
 
     def clear_preview(self):
 
+        self._last_frame = None
+
         self.preview_label.clear()
         self.preview_label.setText("Kamera kapalı")
+
+    # -------------------------------------------------
+    # Pencere Yeniden Boyutlanınca
+    # -------------------------------------------------
+
+    def resizeEvent(self, event):
+
+        super().resizeEvent(event)
+
+        if self._last_frame is not None:
+            self._render_preview(self._last_frame)
 
     # -------------------------------------------------
     # Bilgi Güncelleme
@@ -190,7 +221,9 @@ class ReferencePage(QWidget):
         """
         items: [(etiket, channel_id_ya_da_None), ...]
         İlk eleman her zaman birincil kamerayı (channel_id=None)
-        temsil etmeli.
+        temsil etmeli. Sadece birincil varsa (tek eleman), seçim
+        kutusu tek kameralı bandlarda kafa karıştırmasın diye
+        tamamen gizlenir.
         """
 
         self.channel_combo.blockSignals(True)
@@ -201,6 +234,8 @@ class ReferencePage(QWidget):
             self.channel_combo.addItem(label, channel_id)
 
         self.channel_combo.blockSignals(False)
+
+        self.channel_container.setVisible(len(items) > 1)
 
     def get_selected_channel_id(self):
 

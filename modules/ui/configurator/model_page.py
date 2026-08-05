@@ -114,10 +114,13 @@ class ModelPage(QWidget):
         super().__init__()
 
         layout = QHBoxLayout(self)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(16)
 
         # ---------- Sol : Model Listesi ----------
 
         left_column = QVBoxLayout()
+        left_column.setSpacing(8)
 
         left_column.addWidget(QLabel("Modeller"))
 
@@ -139,6 +142,7 @@ class ModelPage(QWidget):
         # ---------- Sağ : Beklenen Durum ----------
 
         right_column = QVBoxLayout()
+        right_column.setSpacing(8)
 
         right_column.addWidget(
             QLabel(
@@ -152,7 +156,7 @@ class ModelPage(QWidget):
         self.roi_items = {}
 
         self.preview_view = QGraphicsView(self.preview_scene)
-        self.preview_view.setMinimumSize(480, 360)
+        self.preview_view.setMinimumSize(320, 240)
         right_column.addWidget(self.preview_view, stretch=2)
 
         right_column.addWidget(
