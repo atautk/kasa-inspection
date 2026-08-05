@@ -3,28 +3,38 @@ from __future__ import annotations
 import cv2
 from pathlib import Path
 
-from .band import Band
-
 
 class ReferenceManager:
+    """
+    target: Band, CameraChannel veya doğrudan bir Path/str olabilir.
+    Band ve CameraChannel'ın ikisi de bir "reference" Path alanına
+    sahip - hangi tür olduğuna bakmaksızın onu kullanırız (duck
+    typing). Böylece birincil kamera (Band) ve ek kamera kanalları
+    (CameraChannel) aynı kod yoluyla çalışır.
+    """
+
+    # -------------------------------------------------
+
+    def _resolve(self, target) -> Path:
+
+        reference = getattr(target, "reference", None)
+
+        if reference is not None:
+            return reference
+
+        return Path(target)
 
     # -------------------------------------------------
 
     def exists(self, target) -> bool:
 
-        if isinstance(target, Band):
-            return target.reference.exists()
-
-        return Path(target).exists()
+        return self._resolve(target).exists()
 
     # -------------------------------------------------
 
     def load(self, target):
 
-        if isinstance(target, Band):
-            filename = target.reference
-        else:
-            filename = Path(target)
+        filename = self._resolve(target)
 
         if not filename.exists():
             return None
@@ -42,10 +52,7 @@ class ReferenceManager:
 
     def save(self, target, image):
 
-        if isinstance(target, Band):
-            filename = target.reference
-        else:
-            filename = Path(target)
+        filename = self._resolve(target)
 
         cv2.imwrite(
             str(filename),
@@ -56,10 +63,7 @@ class ReferenceManager:
 
     def delete(self, target):
 
-        if isinstance(target, Band):
-            filename = target.reference
-        else:
-            filename = Path(target)
+        filename = self._resolve(target)
 
         if filename.exists():
             filename.unlink()

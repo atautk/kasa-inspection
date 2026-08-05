@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QComboBox,
     QGraphicsView,
     QGraphicsScene,
     QGraphicsPolygonItem,
@@ -276,11 +277,14 @@ class ROIPage(QWidget):
         get_rois() -> list[dict]
         clear()
         set_status(text)
+        set_channels(items: list[tuple[str, str | None]])
+        get_selected_channel_id() -> str | None
 
     Controller'ın dinlediği sinyaller:
 
         save_button.clicked
         auto_detect_button.clicked
+        channel_combo.currentIndexChanged
     """
 
     def __init__(self):
@@ -296,6 +300,17 @@ class ROIPage(QWidget):
         self.temp_markers = []
 
         layout = QVBoxLayout(self)
+
+        # ---------- Kamera Kanalı Seçimi ----------
+
+        channel_row = QHBoxLayout()
+
+        channel_row.addWidget(QLabel("Kamera Kanalı:"))
+
+        self.channel_combo = QComboBox()
+        channel_row.addWidget(self.channel_combo, stretch=1)
+
+        layout.addLayout(channel_row)
 
         # ---------- Bilgi ----------
 
@@ -545,6 +560,30 @@ class ROIPage(QWidget):
     def _generate_id(self):
 
         return str(uuid.uuid4())
+
+    # -------------------------------------------------
+    # Kamera Kanalı Seçimi
+    # -------------------------------------------------
+
+    def set_channels(self, items: list):
+        """
+        items: [(etiket, channel_id_ya_da_None), ...]
+        İlk eleman her zaman birincil kamerayı (channel_id=None)
+        temsil etmeli.
+        """
+
+        self.channel_combo.blockSignals(True)
+
+        self.channel_combo.clear()
+
+        for label, channel_id in items:
+            self.channel_combo.addItem(label, channel_id)
+
+        self.channel_combo.blockSignals(False)
+
+    def get_selected_channel_id(self):
+
+        return self.channel_combo.currentData()
 
     # -------------------------------------------------
     # Pencere Yeniden Boyutlanınca

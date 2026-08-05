@@ -7,7 +7,8 @@ from PySide6.QtWidgets import (
     QLabel,
     QPushButton,
     QFrame,
-    QSizePolicy
+    QSizePolicy,
+    QComboBox
 )
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtCore import Qt
@@ -31,12 +32,15 @@ class ReferencePage(QWidget):
         enable_capture(enabled: bool)
         enable_camera_button(enabled: bool)
         enable_retake_button(enabled: bool)
+        set_channels(items: list[tuple[str, str | None]])
+        get_selected_channel_id() -> str | None
 
     Controller'ın dinlediği sinyaller (butonlar):
 
         camera_button.clicked
         capture_button.clicked
         retake_button.clicked
+        channel_combo.currentIndexChanged
     """
 
     def __init__(self):
@@ -44,6 +48,21 @@ class ReferencePage(QWidget):
         super().__init__()
 
         layout = QVBoxLayout(self)
+
+        # ---------- Kamera Kanalı Seçimi ----------
+        # (Aynı kasayı farklı açılardan izleyen ek kameralar varsa,
+        # hangisi için fotoğraf çekildiğini seçmeye yarar. Birincil
+        # kamera dışında ek kanal yoksa tek seçenek "Birincil Kamera"
+        # olur ve bu satır sıradan kullanımı etkilemez.)
+
+        channel_row = QHBoxLayout()
+
+        channel_row.addWidget(QLabel("Kamera Kanalı:"))
+
+        self.channel_combo = QComboBox()
+        channel_row.addWidget(self.channel_combo, stretch=1)
+
+        layout.addLayout(channel_row)
 
         # ---------- Preview ----------
 
@@ -162,3 +181,27 @@ class ReferencePage(QWidget):
     def enable_retake_button(self, enabled: bool):
 
         self.retake_button.setEnabled(enabled)
+
+    # -------------------------------------------------
+    # Kamera Kanalı Seçimi
+    # -------------------------------------------------
+
+    def set_channels(self, items: list):
+        """
+        items: [(etiket, channel_id_ya_da_None), ...]
+        İlk eleman her zaman birincil kamerayı (channel_id=None)
+        temsil etmeli.
+        """
+
+        self.channel_combo.blockSignals(True)
+
+        self.channel_combo.clear()
+
+        for label, channel_id in items:
+            self.channel_combo.addItem(label, channel_id)
+
+        self.channel_combo.blockSignals(False)
+
+    def get_selected_channel_id(self):
+
+        return self.channel_combo.currentData()

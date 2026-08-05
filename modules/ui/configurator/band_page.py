@@ -3,11 +3,13 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QListWidget,
+    QListWidgetItem,
     QPushButton,
     QLabel,
     QComboBox,
     QGroupBox
 )
+from PySide6.QtCore import Qt
 
 
 class BandPage(QWidget):
@@ -70,6 +72,34 @@ class BandPage(QWidget):
 
         layout.addWidget(management_group)
 
+        # ---------- Kamera Kanalları (Çoklu Açı) ----------
+        # Aynı kasayı farklı açılardan izlemek için birincil kameraya
+        # ek kameralar tanımlanabilir. Bandın kendisinin camera/
+        # reference/roi alanları "birincil" kamerayı temsil eder ve
+        # buradan etkilenmez.
+
+        camera_channels_group = QGroupBox(
+            "Kamera Kanalları (Çoklu Açı)"
+        )
+        camera_channels_layout = QVBoxLayout(camera_channels_group)
+
+        self.camera_channel_list = QListWidget()
+        camera_channels_layout.addWidget(self.camera_channel_list)
+
+        camera_channel_buttons = QHBoxLayout()
+
+        self.add_camera_channel_button = QPushButton("Kanal Ekle")
+        self.add_camera_channel_button.setEnabled(False)
+        camera_channel_buttons.addWidget(self.add_camera_channel_button)
+
+        self.remove_camera_channel_button = QPushButton("Kanal Sil")
+        self.remove_camera_channel_button.setEnabled(False)
+        camera_channel_buttons.addWidget(self.remove_camera_channel_button)
+
+        camera_channels_layout.addLayout(camera_channel_buttons)
+
+        layout.addWidget(camera_channels_group)
+
         # ---------- Arduino (Demo/Sunum Amaçlı) ----------
 
         arduino_group = QGroupBox("Arduino Alarm (Demo)")
@@ -122,3 +152,38 @@ class BandPage(QWidget):
         self.arduino_port_combo.setEnabled(enabled)
         self.refresh_ports_button.setEnabled(enabled)
         self.save_arduino_button.setEnabled(enabled)
+
+    # -------------------------------------------------
+    # Kamera Kanalları
+    # -------------------------------------------------
+
+    def set_camera_channels(self, channels: list):
+        """
+        channels: [{"id": ..., "name": ..., "camera_index": ...}, ...]
+        """
+
+        self.camera_channel_list.clear()
+
+        for channel in channels:
+
+            item = QListWidgetItem(
+                f"{channel['name']} (Kamera {channel['camera_index']})"
+            )
+
+            item.setData(Qt.UserRole, channel["id"])
+
+            self.camera_channel_list.addItem(item)
+
+    def get_selected_camera_channel_id(self):
+
+        item = self.camera_channel_list.currentItem()
+
+        if item is None:
+            return None
+
+        return item.data(Qt.UserRole)
+
+    def enable_camera_channel_controls(self, enabled: bool):
+
+        self.add_camera_channel_button.setEnabled(enabled)
+        self.remove_camera_channel_button.setEnabled(enabled)

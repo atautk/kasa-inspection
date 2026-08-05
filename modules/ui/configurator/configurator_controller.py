@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTimer
 
+from modules.configuration.band import Band
 from modules.configuration.band_manager import BandManager
 from modules.configuration.reference_manager import ReferenceManager
 from modules.configuration.model_manager import ModelManager
@@ -166,6 +167,14 @@ class ConfiguratorController:
             self.open_telegram_recipients
         )
 
+        band_page.add_camera_channel_button.clicked.connect(
+            self.add_camera_channel
+        )
+
+        band_page.remove_camera_channel_button.clicked.connect(
+            self.remove_camera_channel
+        )
+
         reference_page = self.window.reference_page
 
         reference_page.camera_button.clicked.connect(
@@ -180,6 +189,10 @@ class ConfiguratorController:
             self.retake_reference
         )
 
+        reference_page.channel_combo.currentIndexChanged.connect(
+            self.on_reference_channel_changed
+        )
+
         roi_page = self.window.roi_page
 
         roi_page.save_button.clicked.connect(
@@ -188,6 +201,10 @@ class ConfiguratorController:
 
         roi_page.auto_detect_button.clicked.connect(
             self.auto_detect_rois
+        )
+
+        roi_page.channel_combo.currentIndexChanged.connect(
+            self.on_roi_channel_changed
         )
 
         model_page = self.window.model_page
@@ -369,6 +386,9 @@ class ConfiguratorController:
         page.set_arduino_port(self.current_band.arduino_port)
         page.enable_arduino_controls(True)
 
+        self.load_camera_channels()
+        page.enable_camera_channel_controls(True)
+
         self.load_reference_tab()
 
         QMessageBox.information(
@@ -418,6 +438,116 @@ class ConfiguratorController:
             "Arduino portu kaydedildi."
 
         )
+
+    # -------------------------------------------------
+    # Kamera Kanalları (Çoklu Açı)
+    # -------------------------------------------------
+
+    def load_camera_channels(self):
+
+        page = self.window.band_page
+
+        page.set_camera_channels([
+            {
+                "id": channel.id,
+                "name": channel.name,
+                "camera_index": channel.camera_index
+            }
+            for channel in self.current_band.cameras
+        ])
+
+    # -------------------------------------------------
+
+    def add_camera_channel(self):
+
+        if self.current_band is None:
+            return
+
+        name, ok = QInputDialog.getText(
+            self.window,
+            "Yeni Kamera Kanalı",
+            "Kanal Adı (ör. Yan, Üst)"
+        )
+
+        if not ok:
+            return
+
+        name = name.strip()
+
+        if name == "":
+            return
+
+        camera_index, ok = QInputDialog.getInt(
+            self.window,
+            "Yeni Kamera Kanalı",
+            "Kamera İndeksi",
+            0,
+            0,
+            16
+        )
+
+        if not ok:
+            return
+
+        self.band_manager.add_camera_channel(
+            self.current_band,
+            name,
+            camera_index
+        )
+
+        app_logger.info(
+            "[%s] yeni kamera kanalı eklendi: %s / %s (kamera %d)",
+            self.operator_name,
+            self.current_band.name,
+            name,
+            camera_index
+        )
+
+        self.load_camera_channels()
+        self._refresh_camera_selectors()
+
+    # -------------------------------------------------
+
+    def remove_camera_channel(self):
+
+        page = self.window.band_page
+
+        channel_id = page.get_selected_camera_channel_id()
+
+        if channel_id is None:
+
+            QMessageBox.warning(
+                self.window,
+                "Uyarı",
+                "Lütfen silinecek bir kamera kanalı seçin."
+            )
+
+            return
+
+        answer = QMessageBox.question(
+            self.window,
+            "Emin misiniz?",
+            "Kamera kanalı silinecek (fotoğraf/ROI dosyaları diskte "
+            "kalır ama band artık onları kullanmaz). Devam edilsin mi?"
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        self.band_manager.remove_camera_channel(
+            self.current_band,
+            channel_id
+        )
+
+        app_logger.info(
+            "[%s] kamera kanalı silindi: %s / %s",
+            self.operator_name,
+            self.current_band.name,
+            channel_id
+        )
+
+        self.load_camera_channels()
+        self._refresh_camera_selectors()
 
     # -------------------------------------------------
 
@@ -667,6 +797,68 @@ class ConfiguratorController:
         dialog.exec()
 
     # -------------------------------------------------
+    # Kamera Kanalı Yardımcıları (Reference/ROI sekmeleri ortak)
+    # -------------------------------------------------
+
+    def _camera_targets(self) -> list:
+        """
+        (etiket, channel_id_ya_da_None, target) üçlülerini döndürür.
+        target: birincil kamera için Band'in kendisi, ek kanallar
+        için ilgili CameraChannel nesnesi.
+        """
+
+        targets = [("Birincil Kamera", None, self.current_band)]
+
+        for channel in self.current_band.cameras:
+            targets.append((channel.name, channel.id, channel))
+
+        return targets
+
+    def _camera_target_by_id(self, channel_id):
+
+        for label, target_id, target in self._camera_targets():
+
+            if target_id == channel_id:
+                return target
+
+        return self.current_band
+
+    def _camera_index_of(self, target) -> int:
+
+        if isinstance(target, Band):
+            return target.camera
+
+        return target.camera_index
+
+    def _refresh_camera_selectors(self):
+        """
+        Bir kanal eklendiğinde/silindiğinde, Reference ve ROI
+        sekmelerindeki kanal seçim kutularını güncel listeyle
+        yeniden doldurur (seçili kanalı korumaya çalışarak).
+        """
+
+        if self.current_band is None:
+            return
+
+        items = [
+            (label, channel_id)
+            for label, channel_id, _ in self._camera_targets()
+        ]
+
+        for page in (
+            self.window.reference_page,
+            self.window.roi_page
+        ):
+
+            current = page.get_selected_channel_id()
+
+            page.set_channels(items)
+
+            index = page.channel_combo.findData(current)
+
+            page.channel_combo.setCurrentIndex(index if index >= 0 else 0)
+
+    # -------------------------------------------------
     # Reference Sekmesi
     # -------------------------------------------------
 
@@ -676,11 +868,33 @@ class ConfiguratorController:
 
         page = self.window.reference_page
 
+        page.set_channels([
+            (label, channel_id)
+            for label, channel_id, _ in self._camera_targets()
+        ])
+
+        self._show_reference_for_selected_channel()
+
+    # -------------------------------------------------
+
+    def on_reference_channel_changed(self):
+
+        self.stop_camera()
+        self._show_reference_for_selected_channel()
+
+    # -------------------------------------------------
+
+    def _show_reference_for_selected_channel(self):
+
+        page = self.window.reference_page
+
+        target = self._current_reference_target()
+
         self.last_reference_frame = None
 
-        if self.reference_manager.exists(self.current_band):
+        if self.reference_manager.exists(target):
 
-            image = self.reference_manager.load(self.current_band)
+            image = self.reference_manager.load(target)
 
             page.set_preview(image)
             page.set_status("Kayıtlı reference bulundu")
@@ -703,6 +917,14 @@ class ConfiguratorController:
 
     # -------------------------------------------------
 
+    def _current_reference_target(self):
+
+        channel_id = self.window.reference_page.get_selected_channel_id()
+
+        return self._camera_target_by_id(channel_id)
+
+    # -------------------------------------------------
+
     def toggle_camera(self):
 
         if self.camera is not None and self.camera.is_open():
@@ -722,8 +944,10 @@ class ConfiguratorController:
 
         page = self.window.reference_page
 
+        target = self._current_reference_target()
+
         self.camera = Camera(
-            camera_index=self.current_band.camera
+            camera_index=self._camera_index_of(target)
         )
 
         if not self.camera.open():
@@ -831,9 +1055,11 @@ class ConfiguratorController:
         if self.last_reference_frame is None:
             return
 
+        target = self._current_reference_target()
+
         self.reference_manager.save(
 
-            self.current_band,
+            target,
 
             self.last_reference_frame
 
@@ -878,7 +1104,7 @@ class ConfiguratorController:
         if answer != QMessageBox.Yes:
             return
 
-        self.reference_manager.delete(self.current_band)
+        self.reference_manager.delete(self._current_reference_target())
 
         self.last_reference_frame = None
 
@@ -904,19 +1130,40 @@ class ConfiguratorController:
 
         page = self.window.roi_page
 
-        if not self.reference_manager.exists(self.current_band):
+        page.set_channels([
+            (label, channel_id)
+            for label, channel_id, _ in self._camera_targets()
+        ])
+
+        self._show_roi_for_selected_channel()
+
+    # -------------------------------------------------
+
+    def on_roi_channel_changed(self):
+
+        self._show_roi_for_selected_channel()
+
+    # -------------------------------------------------
+
+    def _show_roi_for_selected_channel(self):
+
+        page = self.window.roi_page
+
+        target = self._current_roi_target()
+
+        if not self.reference_manager.exists(target):
 
             page.clear()
             page.set_status(
-                "Reference bulunamadı. Önce Reference sekmesinden "
-                "fotoğraf çekin."
+                "Bu kanal için reference bulunamadı. Önce Reference "
+                "sekmesinden fotoğraf çekin."
             )
             return
 
-        image = self.reference_manager.load(self.current_band)
+        image = self.reference_manager.load(target)
         page.set_background(image)
 
-        rois = self._read_roi_file()
+        rois = self._read_roi_file(target.roi)
         page.load_rois(rois)
 
         page.set_status(
@@ -925,10 +1172,20 @@ class ConfiguratorController:
 
     # -------------------------------------------------
 
+    def _current_roi_target(self):
+
+        channel_id = self.window.roi_page.get_selected_channel_id()
+
+        return self._camera_target_by_id(channel_id)
+
+    # -------------------------------------------------
+
     def save_rois(self):
 
         if self.current_band is None:
             return
+
+        target = self._current_roi_target()
 
         rois = self.window.roi_page.get_rois()
 
@@ -938,7 +1195,7 @@ class ConfiguratorController:
         }
 
         with open(
-            self.current_band.roi,
+            target.roi,
             "w",
             encoding="utf-8"
         ) as f:
@@ -954,10 +1211,15 @@ class ConfiguratorController:
             f"{len(rois)} ROI kaydedildi."
         )
 
+        channel_label = (
+            "Birincil" if isinstance(target, Band) else target.name
+        )
+
         app_logger.info(
-            "[%s] ROI'ler kaydedildi: %s (%d ROI)",
+            "[%s] ROI'ler kaydedildi: %s / %s (%d ROI)",
             self.operator_name,
             self.current_band.name,
+            channel_label,
             len(rois)
         )
 
@@ -978,7 +1240,9 @@ class ConfiguratorController:
         if self.current_band is None:
             return
 
-        if not self.reference_manager.exists(self.current_band):
+        target = self._current_roi_target()
+
+        if not self.reference_manager.exists(target):
 
             QMessageBox.warning(
                 self.window,
@@ -988,7 +1252,7 @@ class ConfiguratorController:
 
             return
 
-        image = self.reference_manager.load(self.current_band)
+        image = self.reference_manager.load(target)
 
         detected = self.roi_auto_detector.detect(image)
 
@@ -1041,9 +1305,10 @@ class ConfiguratorController:
 
     # -------------------------------------------------
 
-    def _read_roi_file(self) -> list:
+    def _read_roi_file(self, roi_file=None) -> list:
 
-        roi_file = self.current_band.roi
+        if roi_file is None:
+            roi_file = self.current_band.roi
 
         if not roi_file.exists():
             return []
@@ -1276,11 +1541,32 @@ class ConfiguratorController:
     # -------------------------------------------------
 
     def _roi_names(self) -> list:
+        """
+        Model editöründeki "Beklenen Durum" tablosunda kullanılacak
+        tüm ROI isimlerini döndürür: birincil kameranın isimleri
+        olduğu gibi, ek kamera kanallarının isimleri ise
+        PrefixedRecipeAdapter ile aynı kurala göre "KanalAdı:ROI"
+        şeklinde nitelenmiş olarak.
+        """
 
-        return [
+        names = [
             roi.get("name", "")
             for roi in self._read_roi_file()
         ]
+
+        for channel in self.current_band.cameras:
+
+            channel_roi_names = [
+                roi.get("name", "")
+                for roi in self._read_roi_file(channel.roi)
+            ]
+
+            names.extend(
+                f"{channel.name}:{name}"
+                for name in channel_roi_names
+            )
+
+        return names
 
     # -------------------------------------------------
     # Yardımcılar

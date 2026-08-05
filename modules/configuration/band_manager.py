@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 import shutil
+import uuid
 from pathlib import Path
 
 from .band import Band
+from .camera_channel import CameraChannel
 from modules.utils.logger import get_logger
 
 app_logger = get_logger()
@@ -128,6 +130,17 @@ class BandManager:
 
             data = json.load(f)
 
+        cameras = [
+            CameraChannel(
+                id=entry["id"],
+                name=entry["name"],
+                camera_index=entry.get("camera_index", 0),
+                reference=folder / entry["reference"],
+                roi=folder / entry["roi"]
+            )
+            for entry in data.get("cameras", [])
+        ]
+
         return Band(
 
             id=data["id"],
@@ -150,7 +163,9 @@ class BandManager:
 
             version=data.get("version", "1.0"),
 
-            confirm_frames=data.get("confirm_frames", 3)
+            confirm_frames=data.get("confirm_frames", 3),
+
+            cameras=cameras
 
         )
 
@@ -171,7 +186,22 @@ class BandManager:
             "threshold": band.threshold,
             "arduino_port": band.arduino_port,
             "version": band.version,
-            "confirm_frames": band.confirm_frames
+            "confirm_frames": band.confirm_frames,
+
+            "cameras": [
+                {
+                    "id": channel.id,
+                    "name": channel.name,
+                    "camera_index": channel.camera_index,
+                    "reference": str(
+                        channel.reference.relative_to(band.root)
+                    ).replace("\\", "/"),
+                    "roi": str(
+                        channel.roi.relative_to(band.root)
+                    ).replace("\\", "/")
+                }
+                for channel in band.cameras
+            ]
 
         }
 
@@ -187,6 +217,56 @@ class BandManager:
                 indent=4,
                 ensure_ascii=False
             )
+
+    # -------------------------------------------------
+    # Ek Kamera Kanalları (aynı kasayı farklı açıdan izleyen kameralar)
+    # -------------------------------------------------
+
+    def add_camera_channel(
+        self,
+        band: Band,
+        name: str,
+        camera_index: int
+    ) -> CameraChannel:
+
+        channel_id = uuid.uuid4().hex[:8]
+
+        channel_folder = band.root / "cameras" / channel_id
+        channel_folder.mkdir(parents=True, exist_ok=True)
+
+        roi_file = channel_folder / "roi.json"
+
+        with open(roi_file, "w", encoding="utf-8") as f:
+
+            json.dump(
+                {"version": "1.0", "rois": []},
+                f,
+                indent=4,
+                ensure_ascii=False
+            )
+
+        channel = CameraChannel(
+            id=channel_id,
+            name=name,
+            camera_index=camera_index,
+            reference=channel_folder / "reference.png",
+            roi=roi_file
+        )
+
+        band.cameras.append(channel)
+
+        self.save_band(band)
+
+        return channel
+
+    def remove_camera_channel(self, band: Band, channel_id: str):
+
+        band.cameras = [
+            channel for channel in band.cameras
+            if channel.id != channel_id
+        ]
+
+        self.save_band(band)
 
     # -------------------------------------------------
     # Bant Sil

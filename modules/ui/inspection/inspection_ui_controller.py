@@ -19,7 +19,10 @@ from modules.core.telegram_reaction_poller import TelegramReactionPoller
 from modules.configuration.band_manager import BandManager
 from modules.configuration.model_manager import ModelManager
 from modules.configuration.reference_manager import ReferenceManager
-from modules.configuration.model_recipe_adapter import ModelRecipeAdapter
+from modules.configuration.model_recipe_adapter import (
+    ModelRecipeAdapter,
+    PrefixedRecipeAdapter
+)
 from modules.configuration.inspection_logger import InspectionLogger
 from modules.configuration.ng_capture_manager import NGCaptureManager
 from modules.configuration.configuration_validator import ConfigurationValidator
@@ -83,6 +86,11 @@ class InspectionUIController:
         self.recipe_manager = ModelRecipeAdapter(None)
 
         self.roi_manager = ROIManager()
+
+        # Aynı kasayı ek açılardan izleyen kameralar (varsa).
+        # channel_id -> {"channel", "roi_manager", "reference_image",
+        #                "cap", "inspection_controller"}
+        self.extra_channels = {}
 
         self.inspection_controller = None
         self.inspection_logger = None
@@ -204,6 +212,8 @@ class InspectionUIController:
             self.current_band
         )
 
+        self._load_extra_channels()
+
         self.models = self.model_manager.list_models(
             self.current_band
         )
@@ -218,6 +228,35 @@ class InspectionUIController:
             self.current_model = None
             self.recipe_manager = ModelRecipeAdapter(None)
             self._build_inspection_controller()
+
+    def _load_extra_channels(self):
+        """
+        Bandın ek kamera kanallarını (varsa) yükler - her biri için
+        kendi ROI setini ve referans fotoğrafını okur. Kameraları
+        henüz AÇMAZ (birincil kamera gibi bu, _start()'ta olur).
+        """
+
+        for state in self.extra_channels.values():
+
+            if state["cap"] is not None:
+                state["cap"].release()
+
+        self.extra_channels = {}
+
+        for channel in self.current_band.cameras:
+
+            roi_manager = ROIManager()
+            roi_manager.load(channel.roi)
+
+            self.extra_channels[channel.id] = {
+                "channel": channel,
+                "roi_manager": roi_manager,
+                "reference_image": self.reference_manager.load(
+                    channel.reference
+                ),
+                "cap": None,
+                "inspection_controller": None
+            }
 
     def _warn_if_band_config_invalid(self, band):
 
@@ -316,6 +355,27 @@ class InspectionUIController:
             decision_engine
         )
 
+        for state in self.extra_channels.values():
+
+            channel_decision_engine = DecisionEngine()
+
+            if self.current_band is not None:
+                channel_decision_engine.set_threshold(
+                    self.current_band.threshold
+                )
+
+            state["inspection_controller"] = InspectionController(
+                ArucoDetector(),
+                LocalizationEngine(),
+                ReferenceFrame(width=1200, height=800),
+                InspectionEngine(),
+                state["roi_manager"],
+                PrefixedRecipeAdapter(
+                    self.recipe_manager, state["channel"].name
+                ),
+                channel_decision_engine
+            )
+
     # -------------------------------------------------
     # Combo Değişimi
     # -------------------------------------------------
@@ -368,6 +428,8 @@ class InspectionUIController:
             )
 
             return
+
+        self._open_extra_channel_cameras()
 
         self._build_inspection_controller()
 
@@ -633,6 +695,28 @@ class InspectionUIController:
 
         return cap
 
+    def _open_extra_channel_cameras(self):
+        """
+        Ek kamera kanallarının her birini açmayı dener. Biri
+        açılamazsa incelemeyi durdurmaz - o kanal sadece bu oturum
+        boyunca sonuçsuz kalır (tick döngüsü cap=None olan kanalları
+        atlar), diğer kanallar/birincil kamera etkilenmez.
+        """
+
+        for state in self.extra_channels.values():
+
+            cap = self._open_camera(state["channel"].camera_index)
+
+            state["cap"] = cap
+
+            if cap is None:
+
+                app_logger.warning(
+                    "Ek kamera açılamadı: %s (index=%s)",
+                    state["channel"].name,
+                    state["channel"].camera_index
+                )
+
     # -------------------------------------------------
     # Kamera Bağlantısı Koptu / Yeniden Bağlan
     # -------------------------------------------------
@@ -748,6 +832,12 @@ class InspectionUIController:
         if self.cap is not None:
             self.cap.release()
             self.cap = None
+
+        for state in self.extra_channels.values():
+
+            if state["cap"] is not None:
+                state["cap"].release()
+                state["cap"] = None
 
         if self.arduino_controller is not None:
 
@@ -950,6 +1040,78 @@ class InspectionUIController:
         self.last_alert_state = overall_result
 
     # -------------------------------------------------
+    # Ek Kamera Kanalları (aynı kasayı farklı açıdan izleyen kameralar)
+    # -------------------------------------------------
+
+    def _build_combined_results_and_display(self, primary_results, primary_display):
+        """
+        Birincil kameranın sonuçlarına/görüntüsüne, varsa ek kamera
+        kanallarının sonuçlarını/görüntülerini ekler.
+
+        Ek kanalların ROI isimleri "KanalAdı:ROI" şeklinde nitelenir
+        ki iki farklı kanalda aynı isimde (ör. "G01") bir ROI olsa
+        bile karışmasın. Genel OK/NG kararı, tüm kanalların TÜM
+        gözlerinin birleşiminden hesaplanır (herhangi biri NG ise
+        genel sonuç NG).
+
+        Bir kanalın kamerası açılamadıysa veya o kare okunamadıysa,
+        o kanal sessizce atlanır - diğer kanallar/birincil kamera
+        etkilenmez.
+        """
+
+        combined_results = dict(primary_results)
+        combined_display = primary_display
+
+        for state in self.extra_channels.values():
+
+            if state["cap"] is None:
+                continue
+
+            ret, frame = state["cap"].read()
+
+            if not ret:
+                continue
+
+            channel_result = state["inspection_controller"].process(
+                frame, state["reference_image"]
+            )
+
+            if not channel_result["success"]:
+                continue
+
+            channel_display = channel_result["reference_display"]
+
+            if channel_display is None:
+                channel_display = frame
+
+            combined_display = self._hconcat_images(
+                combined_display, channel_display
+            )
+
+            channel_name = state["channel"].name
+
+            for roi_name, data in channel_result["results"].items():
+                combined_results[f"{channel_name}:{roi_name}"] = data
+
+        return combined_results, combined_display
+
+    def _hconcat_images(self, left, right):
+
+        height = min(left.shape[0], right.shape[0])
+
+        left_resized = cv2.resize(
+            left,
+            (int(left.shape[1] * height / left.shape[0]), height)
+        )
+
+        right_resized = cv2.resize(
+            right,
+            (int(right.shape[1] * height / right.shape[0]), height)
+        )
+
+        return cv2.hconcat([left_resized, right_resized])
+
+    # -------------------------------------------------
     # Kamera Döngüsü
     # -------------------------------------------------
 
@@ -1038,17 +1200,21 @@ class InspectionUIController:
         if display is None:
             display = frame
 
+        combined_results, display = self._build_combined_results_and_display(
+            result["results"], display
+        )
+
         self.page.set_image(display)
 
-        self.page.set_results(result["results"])
+        self.page.set_results(combined_results)
 
         overall_result = None
 
-        if result["results"]:
+        if combined_results:
 
             overall_result = (
                 "OK"
-                if all(data["ok"] for data in result["results"].values())
+                if all(data["ok"] for data in combined_results.values())
                 else "NG"
             )
 
@@ -1056,15 +1222,15 @@ class InspectionUIController:
 
         if self.arduino_controller is not None:
 
-            if result["results"]:
-                self.arduino_controller.send_results(result["results"])
+            if combined_results:
+                self.arduino_controller.send_results(combined_results)
             else:
                 self.arduino_controller.send_waiting()
 
         if (
             self.inspection_logger is not None
-            and result["results"]
-            and self.inspection_logger.should_log(result["results"])
+            and combined_results
+            and self.inspection_logger.should_log(combined_results)
         ):
 
             model_name = (
@@ -1083,7 +1249,7 @@ class InspectionUIController:
                 )
 
             self.inspection_logger.log(
-                result["results"],
+                combined_results,
                 model_name,
                 image_path
             )
@@ -1091,7 +1257,7 @@ class InspectionUIController:
             if overall_result == "NG":
 
                 self._notify_telegram_ng(
-                    result["results"],
+                    combined_results,
                     image_path,
                     self.inspection_logger.last_inserted_id
                 )

@@ -1,5 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from .camera_channel import CameraChannel
 
 
 @dataclass(slots=True)
@@ -22,3 +24,8 @@ class Band:
     # bildirilmesi için bu kadar ardışık karede tutarlı kalması
     # gerekir - bkz. InspectionLogger.
     confirm_frames: int = 3
+
+    # Aynı kasayı farklı açılardan izleyen EK kameralar. Birincil
+    # kamera (camera/reference/roi alanları) burada YER ALMAZ - bu
+    # sayede tek kameralı bandlar hiç değişmeden çalışmaya devam eder.
+    cameras: list = field(default_factory=list)
