@@ -40,11 +40,16 @@ class TelegramNotifier:
     # -------------------------------------------------
     # Senkron Gönderim (test edilebilir, sonuç bekler)
     # -------------------------------------------------
+    #
+    # Başarılıysa gönderilen mesajın Telegram mesaj id'sini (int),
+    # başarısızsa None döner. Mesaj id'si, kullanıcı NG mesajına
+    # emoji ile tepki verdiğinde hangi kaydın düzeltileceğini bulmak
+    # için saklanır (bkz. InspectionLogger.set_telegram_message_id).
 
-    def send_message(self, text: str) -> bool:
+    def send_message(self, text: str):
 
         if not self.is_configured():
-            return False
+            return None
 
         try:
 
@@ -55,15 +60,7 @@ class TelegramNotifier:
                 timeout=self.TIMEOUT_SECONDS
             )
 
-            if not response.ok:
-
-                app_logger.warning(
-                    "Telegram mesajı gönderilemedi (HTTP %s): %s",
-                    response.status_code,
-                    response.text[:200]
-                )
-
-            return response.ok
+            return self._extract_message_id(response, "mesaj")
 
         except Exception as e:
 
@@ -71,12 +68,12 @@ class TelegramNotifier:
                 "Telegram mesajı gönderilemedi: %s", e
             )
 
-            return False
+            return None
 
-    def send_photo(self, image_path: str, caption: str = "") -> bool:
+    def send_photo(self, image_path: str, caption: str = ""):
 
         if not self.is_configured():
-            return False
+            return None
 
         try:
 
@@ -90,15 +87,7 @@ class TelegramNotifier:
                     timeout=self.TIMEOUT_SECONDS
                 )
 
-            if not response.ok:
-
-                app_logger.warning(
-                    "Telegram fotoğrafı gönderilemedi (HTTP %s): %s",
-                    response.status_code,
-                    response.text[:200]
-                )
-
-            return response.ok
+            return self._extract_message_id(response, "fotoğraf")
 
         except Exception as e:
 
@@ -106,24 +95,56 @@ class TelegramNotifier:
                 "Telegram fotoğrafı gönderilemedi: %s", e
             )
 
-            return False
+            return None
+
+    # -------------------------------------------------
+
+    def _extract_message_id(self, response, label: str):
+
+        if not response.ok:
+
+            app_logger.warning(
+                "Telegram %s gönderilemedi (HTTP %s): %s",
+                label,
+                response.status_code,
+                response.text[:200]
+            )
+
+            return None
+
+        try:
+
+            return response.json()["result"]["message_id"]
+
+        except Exception:
+
+            return None
 
     # -------------------------------------------------
     # Asenkron Gönderim (canlı inceleme döngüsünde kullanılır)
     # -------------------------------------------------
+    #
+    # on_sent, verilirse gönderim tamamlandığında (arka plan
+    # thread'inde) message_id (int) veya None ile çağrılır.
 
-    def send_message_async(self, text: str):
+    def send_message_async(self, text: str, on_sent=None):
 
-        threading.Thread(
-            target=self.send_message,
-            args=(text,),
-            daemon=True
-        ).start()
+        def _run():
 
-    def send_photo_async(self, image_path: str, caption: str = ""):
+            message_id = self.send_message(text)
 
-        threading.Thread(
-            target=self.send_photo,
-            args=(image_path, caption),
-            daemon=True
-        ).start()
+            if on_sent is not None:
+                on_sent(message_id)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def send_photo_async(self, image_path: str, caption: str = "", on_sent=None):
+
+        def _run():
+
+            message_id = self.send_photo(image_path, caption)
+
+            if on_sent is not None:
+                on_sent(message_id)
+
+        threading.Thread(target=_run, daemon=True).start()

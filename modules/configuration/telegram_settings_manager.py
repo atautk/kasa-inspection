@@ -37,11 +37,15 @@ class TelegramSettingsManager:
 
             return TelegramSettings()
 
+        default = TelegramSettings()
+
         return TelegramSettings(
             bot_token=data.get("bot_token", ""),
             chat_id=data.get("chat_id", ""),
             notify_on_ng=data.get("notify_on_ng", True),
-            notify_on_disconnect=data.get("notify_on_disconnect", True)
+            notify_on_disconnect=data.get("notify_on_disconnect", True),
+            confirm_emoji=data.get("confirm_emoji", default.confirm_emoji),
+            react_to_confirm=data.get("react_to_confirm", False)
         )
 
     # -------------------------------------------------
@@ -54,7 +58,9 @@ class TelegramSettingsManager:
             "bot_token": settings.bot_token,
             "chat_id": settings.chat_id,
             "notify_on_ng": settings.notify_on_ng,
-            "notify_on_disconnect": settings.notify_on_disconnect
+            "notify_on_disconnect": settings.notify_on_disconnect,
+            "confirm_emoji": settings.confirm_emoji,
+            "react_to_confirm": settings.react_to_confirm
         }
 
         with open(self.path, "w", encoding="utf-8") as f:

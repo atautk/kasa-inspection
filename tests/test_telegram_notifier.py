@@ -7,12 +7,13 @@ import pytest
 from modules.core.telegram_notifier import TelegramNotifier
 
 
-def _fake_response(ok=True, status_code=200, text=""):
+def _fake_response(ok=True, status_code=200, text="", message_id=42):
 
     response = MagicMock()
     response.ok = ok
     response.status_code = status_code
     response.text = text
+    response.json.return_value = {"result": {"message_id": message_id}}
 
     return response
 
@@ -35,22 +36,22 @@ def test_send_message_skips_network_call_when_not_configured():
 
         result = notifier.send_message("merhaba")
 
-        assert result is False
+        assert result is None
         assert not mock_post.called
 
 
-def test_send_message_success():
+def test_send_message_success_returns_message_id():
 
     notifier = TelegramNotifier("token", "chat")
 
     with patch(
         "modules.core.telegram_notifier.requests.post",
-        return_value=_fake_response(ok=True)
+        return_value=_fake_response(ok=True, message_id=123)
     ) as mock_post:
 
         result = notifier.send_message("merhaba")
 
-        assert result is True
+        assert result == 123
 
         args, kwargs = mock_post.call_args
         assert "sendMessage" in args[0]
@@ -58,7 +59,7 @@ def test_send_message_success():
         assert kwargs["data"]["text"] == "merhaba"
 
 
-def test_send_message_failure_response_returns_false():
+def test_send_message_failure_response_returns_none():
 
     notifier = TelegramNotifier("token", "chat")
 
@@ -67,7 +68,7 @@ def test_send_message_failure_response_returns_false():
         return_value=_fake_response(ok=False, status_code=401, text="bad token")
     ):
 
-        assert notifier.send_message("merhaba") is False
+        assert notifier.send_message("merhaba") is None
 
 
 def test_send_message_network_exception_does_not_raise():
@@ -79,10 +80,26 @@ def test_send_message_network_exception_does_not_raise():
         side_effect=ConnectionError("no internet")
     ):
 
-        assert notifier.send_message("merhaba") is False
+        assert notifier.send_message("merhaba") is None
 
 
-def test_send_photo_success(tmp_path):
+def test_send_message_unparseable_response_returns_none():
+
+    notifier = TelegramNotifier("token", "chat")
+
+    bad_response = MagicMock()
+    bad_response.ok = True
+    bad_response.json.side_effect = ValueError("not json")
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post",
+        return_value=bad_response
+    ):
+
+        assert notifier.send_message("merhaba") is None
+
+
+def test_send_photo_success_returns_message_id(tmp_path):
 
     image_path = tmp_path / "ng.png"
     image_path.write_bytes(b"fake png bytes")
@@ -91,12 +108,12 @@ def test_send_photo_success(tmp_path):
 
     with patch(
         "modules.core.telegram_notifier.requests.post",
-        return_value=_fake_response(ok=True)
+        return_value=_fake_response(ok=True, message_id=99)
     ) as mock_post:
 
         result = notifier.send_photo(str(image_path), caption="NG!")
 
-        assert result is True
+        assert result == 99
 
         args, kwargs = mock_post.call_args
         assert "sendPhoto" in args[0]
@@ -112,7 +129,7 @@ def test_send_photo_missing_file_does_not_raise():
 
         result = notifier.send_photo("/does/not/exist.png")
 
-        assert result is False
+        assert result is None
         assert not mock_post.called
 
 
@@ -135,10 +152,57 @@ def test_send_message_async_runs_in_background_thread():
 
         notifier.send_message_async("merhaba")
 
-        # arka plan thread'inin bitmesini bekle
         deadline = time.time() + 2
         while not call_thread_names and time.time() < deadline:
             time.sleep(0.01)
 
     assert call_thread_names, "arka plan thread hic cagrilmadi"
     assert call_thread_names[0] != main_thread_name
+
+
+def test_send_message_async_invokes_on_sent_callback_with_message_id():
+
+    notifier = TelegramNotifier("token", "chat")
+
+    received = []
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post",
+        return_value=_fake_response(ok=True, message_id=777)
+    ):
+
+        notifier.send_message_async(
+            "merhaba", on_sent=lambda message_id: received.append(message_id)
+        )
+
+        deadline = time.time() + 2
+        while not received and time.time() < deadline:
+            time.sleep(0.01)
+
+    assert received == [777]
+
+
+def test_send_photo_async_invokes_on_sent_callback_with_none_on_failure(tmp_path):
+
+    image_path = tmp_path / "ng.png"
+    image_path.write_bytes(b"fake png bytes")
+
+    notifier = TelegramNotifier("token", "chat")
+
+    received = []
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post",
+        return_value=_fake_response(ok=False, status_code=500)
+    ):
+
+        notifier.send_photo_async(
+            str(image_path),
+            on_sent=lambda message_id: received.append(message_id)
+        )
+
+        deadline = time.time() + 2
+        while not received and time.time() < deadline:
+            time.sleep(0.01)
+
+    assert received == [None]

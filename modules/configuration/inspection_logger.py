@@ -31,6 +31,10 @@ class InspectionLogger:
         self.pending_result = None
         self.pending_count = 0
 
+        # log() sonrası eklenen satırın id'si (Telegram mesaj
+        # eşleştirmesi gibi işlemler için).
+        self.last_inserted_id = None
+
         self._ensure_schema()
 
     # -------------------------------------------------
@@ -110,6 +114,13 @@ class InspectionLogger:
                     "ALTER TABLE inspections ADD COLUMN reviewed_by TEXT"
                 )
 
+            if "telegram_message_id" not in columns:
+
+                conn.execute(
+                    "ALTER TABLE inspections "
+                    "ADD COLUMN telegram_message_id INTEGER"
+                )
+
             conn.commit()
 
         finally:
@@ -161,6 +172,10 @@ class InspectionLogger:
         model_name: str | None,
         image_path: str | None = None
     ) -> bool:
+        """
+        Kaydı ekler. Eklenen satırın id'si (Telegram mesaj eşleştirmesi
+        gibi sonraki işlemler için) self.last_inserted_id'de bulunur.
+        """
 
         if not results:
             return False
@@ -216,7 +231,7 @@ class InspectionLogger:
 
         try:
 
-            conn.execute(
+            cursor = conn.execute(
                 """
                 INSERT INTO inspections
                     (timestamp, model_name, overall_result, roi_results, image_path)
@@ -230,6 +245,8 @@ class InspectionLogger:
                     image_path
                 )
             )
+
+            self.last_inserted_id = cursor.lastrowid
 
             conn.commit()
 
@@ -391,6 +408,51 @@ class InspectionLogger:
             })
 
         return trend
+
+    # -------------------------------------------------
+    # Telegram Mesaj Eşleştirmesi
+    # -------------------------------------------------
+    #
+    # Bir NG bildirimi Telegram'a gönderildiğinde dönen mesaj id'si
+    # burada saklanır. Kullanıcı o mesaja onay emojisiyle tepki
+    # verdiğinde, mesaj id'sinden hangi kaydın düzeltileceği bulunur.
+
+    def set_telegram_message_id(self, record_id: int, message_id: int):
+
+        conn = self._connect()
+
+        try:
+
+            conn.execute(
+                "UPDATE inspections SET telegram_message_id = ? "
+                "WHERE id = ?",
+                (message_id, record_id)
+            )
+
+            conn.commit()
+
+        finally:
+
+            conn.close()
+
+    def find_record_by_telegram_message_id(self, message_id: int):
+
+        conn = self._connect()
+
+        try:
+
+            row = conn.execute(
+                "SELECT id FROM inspections "
+                "WHERE telegram_message_id = ? "
+                "ORDER BY id DESC LIMIT 1",
+                (message_id,)
+            ).fetchone()
+
+        finally:
+
+            conn.close()
+
+        return row[0] if row is not None else None
 
     # -------------------------------------------------
     # NG Kaydını İncelenmiş Olarak OK'e Çevir

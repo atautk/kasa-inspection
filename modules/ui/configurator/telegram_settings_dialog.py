@@ -68,6 +68,24 @@ class TelegramSettingsDialog(QDialog):
         )
         layout.addWidget(self.notify_disconnect_checkbox)
 
+        self.react_to_confirm_checkbox = QCheckBox(
+            "NG mesajına emoji ile tepki verilince otomatik OK'e çevir "
+            "(inceleme sırasında Inspection açık olmalı)"
+        )
+        layout.addWidget(self.react_to_confirm_checkbox)
+
+        emoji_row = QHBoxLayout()
+        emoji_row.addWidget(QLabel("Onay Emojisi:"))
+        self.confirm_emoji_input = QLineEdit()
+        self.confirm_emoji_input.setMaxLength(8)
+        self.confirm_emoji_input.setFixedWidth(60)
+        emoji_row.addWidget(self.confirm_emoji_input)
+        emoji_row.addWidget(
+            QLabel("(sadece bu emoji ile yapılan tepkiler sayılır)")
+        )
+        emoji_row.addStretch()
+        layout.addLayout(emoji_row)
+
         button_row = QHBoxLayout()
 
         self.test_button = QPushButton("&Test Et")
@@ -106,6 +124,10 @@ class TelegramSettingsDialog(QDialog):
         self.notify_disconnect_checkbox.setChecked(
             settings.notify_on_disconnect
         )
+        self.react_to_confirm_checkbox.setChecked(
+            settings.react_to_confirm
+        )
+        self.confirm_emoji_input.setText(settings.confirm_emoji)
 
     def _current_notifier(self) -> TelegramNotifier:
 
@@ -165,6 +187,12 @@ class TelegramSettingsDialog(QDialog):
         settings.notify_on_disconnect = (
             self.notify_disconnect_checkbox.isChecked()
         )
+        settings.react_to_confirm = (
+            self.react_to_confirm_checkbox.isChecked()
+        )
+
+        emoji = self.confirm_emoji_input.text().strip()
+        settings.confirm_emoji = emoji or "✅"
 
         self.settings_manager.save(settings)
 

@@ -284,3 +284,50 @@ def test_clear_removes_all_records_and_resets_state(logger):
 
     assert logger.fetch_recent() == []
     assert logger.last_overall_result is None
+
+
+def test_log_exposes_inserted_record_id(logger):
+
+    logger.log(make_result(False), "clio")
+
+    assert logger.last_inserted_id is not None
+    assert logger.last_inserted_id == logger.fetch_recent()[0]["id"]
+
+
+def test_set_and_find_telegram_message_id(logger):
+
+    logger.log(make_result(False), "clio")
+    record_id = logger.last_inserted_id
+
+    logger.set_telegram_message_id(record_id, 987654)
+
+    found = logger.find_record_by_telegram_message_id(987654)
+
+    assert found == record_id
+
+
+def test_find_telegram_message_id_unknown_returns_none(logger):
+
+    assert logger.find_record_by_telegram_message_id(111) is None
+
+
+def test_telegram_reaction_can_mark_ng_as_reviewed_ok(logger):
+    """
+    Uçtan uca: NG loglanır, Telegram mesaj id'si eşleştirilir,
+    reaksiyon geldiğinde mark_reviewed_ok ile OK'e çevrilebilir.
+    """
+
+    logger.log(make_result(False), "clio")
+    record_id = logger.last_inserted_id
+
+    logger.set_telegram_message_id(record_id, 555)
+
+    found_id = logger.find_record_by_telegram_message_id(555)
+    logger.mark_reviewed_ok(found_id, operator_name="Telegram")
+
+    row = logger.fetch_recent()[0]
+
+    assert row["overall_result"] == "OK"
+    assert row["original_result"] == "NG"
+    assert row["reviewed"] == 1
+    assert row["reviewed_by"] == "Telegram"

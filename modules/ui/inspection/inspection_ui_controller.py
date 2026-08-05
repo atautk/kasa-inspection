@@ -14,6 +14,7 @@ from modules.core.inspection_engine import InspectionEngine
 from modules.core.decision_engine import DecisionEngine
 from modules.core.arduino_controller import ArduinoController
 from modules.core.telegram_notifier import TelegramNotifier
+from modules.core.telegram_reaction_poller import TelegramReactionPoller
 
 from modules.configuration.band_manager import BandManager
 from modules.configuration.model_manager import ModelManager
@@ -82,6 +83,7 @@ class InspectionUIController:
         self.ng_capture_manager = NGCaptureManager()
         self.arduino_controller = None
         self.arduino_was_connected = True
+        self.telegram_reaction_poller = None
         self.last_alert_state = None
         self.last_disk_check = 0.0
         self.disk_warning_active = False
@@ -364,6 +366,7 @@ class InspectionUIController:
         self._build_inspection_controller()
 
         self._connect_arduino()
+        self._start_telegram_reaction_poller()
 
         self.running = True
         self.camera_connected = True
@@ -381,7 +384,7 @@ class InspectionUIController:
     # Telegram Bildirimleri
     # -------------------------------------------------
 
-    def _notify_telegram_ng(self, results: dict, image_path):
+    def _notify_telegram_ng(self, results: dict, image_path, record_id):
 
         settings = self.telegram_settings_manager.load()
 
@@ -404,12 +407,36 @@ class InspectionUIController:
             f"Hatalı gözler: {', '.join(ng_names) if ng_names else '-'}"
         )
 
+        if settings.react_to_confirm:
+
+            caption += (
+                f"\n\nYanlış tespitse bu mesaja {settings.confirm_emoji} "
+                "ile tepki verin, otomatik olarak OK'e çevrilir."
+            )
+
         notifier = TelegramNotifier(settings.bot_token, settings.chat_id)
 
+        # inspection_logger band değişse bile DOĞRU kayda yazsın diye
+        # şu anki referansı closure içine sabitliyoruz (arka plan
+        # thread'i mesaj gönderimi bitince çalışır, o ana kadar band
+        # değişmiş/durdurulmuş olabilir).
+        logger_at_send_time = self.inspection_logger
+
+        def on_sent(message_id):
+
+            if (
+                message_id is not None
+                and record_id is not None
+                and logger_at_send_time is not None
+            ):
+                logger_at_send_time.set_telegram_message_id(
+                    record_id, message_id
+                )
+
         if image_path:
-            notifier.send_photo_async(image_path, caption=caption)
+            notifier.send_photo_async(image_path, caption=caption, on_sent=on_sent)
         else:
-            notifier.send_message_async(caption)
+            notifier.send_message_async(caption, on_sent=on_sent)
 
     def _notify_telegram_disconnect(self, device_name: str):
 
@@ -428,6 +455,64 @@ class InspectionUIController:
 
         notifier.send_message_async(
             f"🔌 {device_name} bağlantısı koptu - {band_name}"
+        )
+
+    # -------------------------------------------------
+    # Telegram Reaksiyon ile NG -> OK Düzeltme
+    # -------------------------------------------------
+
+    def _start_telegram_reaction_poller(self):
+
+        settings = self.telegram_settings_manager.load()
+
+        if not settings.react_to_confirm or not settings.is_configured():
+            return
+
+        self.telegram_reaction_poller = TelegramReactionPoller(
+            settings.bot_token,
+            on_reaction=self._on_telegram_reaction
+        )
+
+        self.telegram_reaction_poller.start()
+
+    def _stop_telegram_reaction_poller(self):
+
+        if self.telegram_reaction_poller is not None:
+
+            self.telegram_reaction_poller.stop()
+            self.telegram_reaction_poller = None
+
+    def _on_telegram_reaction(self, message_id: int, emoji: str):
+        """
+        TelegramReactionPoller'ın arka plan thread'inden çağrılır.
+        Sadece veri/DB katmanına dokunur (thread-safe), Qt widget'larına
+        DOKUNMAZ.
+        """
+
+        settings = self.telegram_settings_manager.load()
+
+        if emoji != settings.confirm_emoji:
+            return
+
+        if self.inspection_logger is None:
+            return
+
+        record_id = self.inspection_logger.find_record_by_telegram_message_id(
+            message_id
+        )
+
+        if record_id is None:
+            return
+
+        self.inspection_logger.mark_reviewed_ok(
+            record_id,
+            operator_name=f"Telegram ({emoji})"
+        )
+
+        app_logger.info(
+            "[Telegram] #%s kaydı %s tepkisiyle OK'e çevrildi",
+            record_id,
+            emoji
         )
 
     def _connect_arduino(self):
@@ -611,6 +696,8 @@ class InspectionUIController:
     def _stop(self):
 
         self.timer.stop()
+
+        self._stop_telegram_reaction_poller()
 
         if self.cap is not None:
             self.cap.release()
@@ -949,13 +1036,19 @@ class InspectionUIController:
                     display
                 )
 
-                self._notify_telegram_ng(result["results"], image_path)
-
             self.inspection_logger.log(
                 result["results"],
                 model_name,
                 image_path
             )
+
+            if overall_result == "NG":
+
+                self._notify_telegram_ng(
+                    result["results"],
+                    image_path,
+                    self.inspection_logger.last_inserted_id
+                )
 
         localization = result["localization"]
 
