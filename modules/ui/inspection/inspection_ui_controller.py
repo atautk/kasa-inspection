@@ -26,6 +26,9 @@ from modules.configuration.configuration_validator import ConfigurationValidator
 from modules.configuration.telegram_settings_manager import (
     TelegramSettingsManager
 )
+from modules.configuration.telegram_recipients_manager import (
+    TelegramRecipientsManager
+)
 
 from modules.ui.roi_manager import ROIManager
 from modules.ui.inspection.debug_dialog import DebugDialog
@@ -66,6 +69,9 @@ class InspectionUIController:
         self.configuration_validator = ConfigurationValidator()
         self.telegram_settings_manager = TelegramSettingsManager(
             Path(band_root) / "telegram_settings.json"
+        )
+        self.telegram_recipients_manager = TelegramRecipientsManager(
+            Path(band_root) / "telegram_recipients.json"
         )
 
         self.bands = []
@@ -384,11 +390,35 @@ class InspectionUIController:
     # Telegram Bildirimleri
     # -------------------------------------------------
 
+    def _telegram_chat_ids(self, primary_chat_id: str) -> list:
+        """
+        Bildirimin gideceği tüm chat id'ler: birincil (ayarlardaki
+        tek) chat + telefon numarasıyla kaydolmuş, aktif işaretli
+        tüm alıcılar. Tekrarlar elenir.
+        """
+
+        chat_ids = []
+
+        if primary_chat_id.strip():
+            chat_ids.append(primary_chat_id.strip())
+
+        for chat_id in self.telegram_recipients_manager.active_chat_ids():
+
+            if chat_id not in chat_ids:
+                chat_ids.append(chat_id)
+
+        return chat_ids
+
     def _notify_telegram_ng(self, results: dict, image_path, record_id):
 
         settings = self.telegram_settings_manager.load()
 
-        if not settings.notify_on_ng or not settings.is_configured():
+        if not settings.notify_on_ng or not settings.bot_token.strip():
+            return
+
+        chat_ids = self._telegram_chat_ids(settings.chat_id)
+
+        if not chat_ids:
             return
 
         ng_names = [
@@ -414,8 +444,6 @@ class InspectionUIController:
                 "ile tepki verin, otomatik olarak OK'e çevrilir."
             )
 
-        notifier = TelegramNotifier(settings.bot_token, settings.chat_id)
-
         # inspection_logger band değişse bile DOĞRU kayda yazsın diye
         # şu anki referansı closure içine sabitliyoruz (arka plan
         # thread'i mesaj gönderimi bitince çalışır, o ana kadar band
@@ -424,6 +452,9 @@ class InspectionUIController:
 
         def on_sent(message_id):
 
+            # Emoji ile onaylama sadece BİRİNCİL sohbetteki mesaj
+            # için destekleniyor (her alıcının kendi mesaj id'sini
+            # ayrı ayrı izlemek şimdilik kapsam dışı).
             if (
                 message_id is not None
                 and record_id is not None
@@ -433,16 +464,29 @@ class InspectionUIController:
                     record_id, message_id
                 )
 
-        if image_path:
-            notifier.send_photo_async(image_path, caption=caption, on_sent=on_sent)
-        else:
-            notifier.send_message_async(caption, on_sent=on_sent)
+        for index, chat_id in enumerate(chat_ids):
+
+            notifier = TelegramNotifier(settings.bot_token, chat_id)
+
+            callback = on_sent if index == 0 else None
+
+            if image_path:
+                notifier.send_photo_async(
+                    image_path, caption=caption, on_sent=callback
+                )
+            else:
+                notifier.send_message_async(caption, on_sent=callback)
 
     def _notify_telegram_disconnect(self, device_name: str):
 
         settings = self.telegram_settings_manager.load()
 
-        if not settings.notify_on_disconnect or not settings.is_configured():
+        if not settings.notify_on_disconnect or not settings.bot_token.strip():
+            return
+
+        chat_ids = self._telegram_chat_ids(settings.chat_id)
+
+        if not chat_ids:
             return
 
         band_name = (
@@ -451,11 +495,13 @@ class InspectionUIController:
             else "?"
         )
 
-        notifier = TelegramNotifier(settings.bot_token, settings.chat_id)
+        text = f"🔌 {device_name} bağlantısı koptu - {band_name}"
 
-        notifier.send_message_async(
-            f"🔌 {device_name} bağlantısı koptu - {band_name}"
-        )
+        for chat_id in chat_ids:
+
+            TelegramNotifier(
+                settings.bot_token, chat_id
+            ).send_message_async(text)
 
     # -------------------------------------------------
     # Telegram Reaksiyon ile NG -> OK Düzeltme

@@ -25,8 +25,14 @@ from modules.ui.configurator.audit_log_dialog import AuditLogDialog
 from modules.ui.configurator.telegram_settings_dialog import (
     TelegramSettingsDialog
 )
+from modules.ui.configurator.telegram_recipients_dialog import (
+    TelegramRecipientsDialog
+)
 from modules.configuration.telegram_settings_manager import (
     TelegramSettingsManager
+)
+from modules.configuration.telegram_recipients_manager import (
+    TelegramRecipientsManager
 )
 from modules.utils.logger import LOG_FILE
 from modules.utils.test_runner import TestRunner
@@ -75,6 +81,9 @@ class ConfiguratorController:
 
         self.telegram_settings_manager = TelegramSettingsManager(
             ROOT / "configuration" / "telegram_settings.json"
+        )
+        self.telegram_recipients_manager = TelegramRecipientsManager(
+            ROOT / "configuration" / "telegram_recipients.json"
         )
 
         self.frame_processor = FrameProcessor(
@@ -151,6 +160,10 @@ class ConfiguratorController:
 
         band_page.telegram_settings_button.clicked.connect(
             self.open_telegram_settings
+        )
+
+        band_page.telegram_recipients_button.clicked.connect(
+            self.open_telegram_recipients
         )
 
         reference_page = self.window.reference_page
@@ -623,6 +636,31 @@ class ConfiguratorController:
 
         dialog = TelegramSettingsDialog(
             self.telegram_settings_manager,
+            self.window
+        )
+
+        dialog.exec()
+
+    # -------------------------------------------------
+
+    def open_telegram_recipients(self):
+
+        if self.operator_manager is None:
+            return
+
+        if not self.operator_manager.is_admin(self.operator_name):
+
+            QMessageBox.warning(
+                self.window,
+                "Yetkisiz",
+                "Bu işlem için yönetici yetkisi gereklidir."
+            )
+
+            return
+
+        dialog = TelegramRecipientsDialog(
+            self.telegram_settings_manager,
+            self.telegram_recipients_manager,
             self.window
         )
 

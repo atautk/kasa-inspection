@@ -1,3 +1,4 @@
+import json
 import threading
 
 import requests
@@ -93,6 +94,48 @@ class TelegramNotifier:
 
             app_logger.warning(
                 "Telegram fotoğrafı gönderilemedi: %s", e
+            )
+
+            return None
+
+    def send_contact_request(self, text: str):
+        """
+        "Kişimi Paylaş" butonlu bir mesaj gönderir (numara eşleştirme
+        akışında kullanılır). Kullanıcı butona basarsa Telegram bir
+        sonraki mesaj güncellemesinde contact bilgisini (telefon
+        numarası + chat id) döner.
+        """
+
+        if not self.is_configured():
+            return None
+
+        try:
+
+            keyboard = {
+                "keyboard": [[
+                    {"text": "📱 Numaramı Paylaş", "request_contact": True}
+                ]],
+                "one_time_keyboard": True,
+                "resize_keyboard": True
+            }
+
+            response = requests.post(
+                f"https://api.telegram.org/bot{self.bot_token}"
+                f"/sendMessage",
+                data={
+                    "chat_id": self.chat_id,
+                    "text": text,
+                    "reply_markup": json.dumps(keyboard)
+                },
+                timeout=self.TIMEOUT_SECONDS
+            )
+
+            return self._extract_message_id(response, "kişi paylaşma isteği")
+
+        except Exception as e:
+
+            app_logger.warning(
+                "Telegram kişi paylaşma isteği gönderilemedi: %s", e
             )
 
             return None

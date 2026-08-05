@@ -182,6 +182,54 @@ def test_send_message_async_invokes_on_sent_callback_with_message_id():
     assert received == [777]
 
 
+def test_send_contact_request_success_returns_message_id():
+
+    notifier = TelegramNotifier("token", "chat")
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post",
+        return_value=_fake_response(ok=True, message_id=55)
+    ) as mock_post:
+
+        result = notifier.send_contact_request("Lütfen numaranızı paylaşın")
+
+        assert result == 55
+
+        args, kwargs = mock_post.call_args
+        assert "sendMessage" in args[0]
+        assert kwargs["data"]["chat_id"] == "chat"
+
+        import json
+        markup = json.loads(kwargs["data"]["reply_markup"])
+        assert markup["keyboard"][0][0]["request_contact"] is True
+
+
+def test_send_contact_request_not_configured_skips_network_call():
+
+    notifier = TelegramNotifier("", "")
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post"
+    ) as mock_post:
+
+        result = notifier.send_contact_request("merhaba")
+
+        assert result is None
+        assert not mock_post.called
+
+
+def test_send_contact_request_network_exception_does_not_raise():
+
+    notifier = TelegramNotifier("token", "chat")
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post",
+        side_effect=ConnectionError("no internet")
+    ):
+
+        assert notifier.send_contact_request("merhaba") is None
+
+
 def test_send_photo_async_invokes_on_sent_callback_with_none_on_failure(tmp_path):
 
     image_path = tmp_path / "ng.png"

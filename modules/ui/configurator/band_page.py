@@ -63,6 +63,11 @@ class BandPage(QWidget):
         self.telegram_settings_button = QPushButton("Telegram Bildirimleri")
         management_layout.addWidget(self.telegram_settings_button)
 
+        self.telegram_recipients_button = QPushButton(
+            "Bildirim Alıcıları (Telefon Numarası)"
+        )
+        management_layout.addWidget(self.telegram_recipients_button)
+
         layout.addWidget(management_group)
 
         # ---------- Arduino (Demo/Sunum Amaçlı) ----------

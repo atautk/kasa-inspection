@@ -176,3 +176,75 @@ def test_poll_once_failure_response_does_not_raise():
     ):
 
         poller._poll_once()  # exception firlatmamali
+
+
+def test_allowed_update_types_only_includes_provided_callbacks():
+
+    only_reaction = TelegramReactionPoller("token", on_reaction=lambda *a: None)
+    assert only_reaction._allowed_update_types() == ["message_reaction"]
+
+    only_message = TelegramReactionPoller("token", on_message=lambda u: None)
+    assert only_message._allowed_update_types() == ["message"]
+
+    both = TelegramReactionPoller(
+        "token", on_reaction=lambda *a: None, on_message=lambda u: None
+    )
+    assert both._allowed_update_types() == ["message_reaction", "message"]
+
+    neither = TelegramReactionPoller("token")
+    assert neither._allowed_update_types() == []
+
+
+def test_handle_update_dispatches_message_updates_to_on_message():
+
+    received = []
+
+    poller = TelegramReactionPoller(
+        "token", on_message=lambda msg: received.append(msg)
+    )
+
+    update = {
+        "update_id": 1,
+        "message": {
+            "chat": {"id": 123},
+            "contact": {"phone_number": "+90555", "first_name": "Ahmet"}
+        }
+    }
+
+    poller._handle_update(update)
+
+    assert received == [update["message"]]
+
+
+def test_handle_update_without_on_message_ignores_message_updates():
+
+    poller = TelegramReactionPoller("token", on_reaction=lambda *a: None)
+
+    # on_message verilmedigi icin message update'i sessizce yok sayilmali,
+    # hata firlatmamali
+    poller._handle_update({"update_id": 1, "message": {"text": "hi"}})
+
+
+def test_handle_update_prefers_reaction_over_message_when_both_given():
+
+    reactions_received = []
+    messages_received = []
+
+    poller = TelegramReactionPoller(
+        "token",
+        on_reaction=lambda mid, emoji: reactions_received.append((mid, emoji)),
+        on_message=lambda msg: messages_received.append(msg)
+    )
+
+    update = {
+        "update_id": 1,
+        "message_reaction": {
+            "message_id": 5,
+            "new_reaction": [{"type": "emoji", "emoji": "✅"}]
+        }
+    }
+
+    poller._handle_update(update)
+
+    assert reactions_received == [(5, "✅")]
+    assert messages_received == []
