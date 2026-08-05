@@ -14,15 +14,25 @@ kod İngilizce yazılmıştır.
 - Sürüklenebilir polygon tabanlı ROI editörü — köşe noktalarından tek tek
   boyutlandırma, referans fotoğrafındaki bölme çizgilerinden **otomatik ROI
   tespiti**
+- **Çoklu kamera desteği** — aynı kasayı farklı açılardan izlemek için
+  birincil kameraya ek kamera kanalları tanımlanabilir; her kanalın kendi
+  referans fotoğrafı ve ROI seti vardır, kanal seçim kutusuyla aralarında
+  geçiş yapılır
 - Model (recipe) yönetimi — her model için beklenen ROI durumları (dolu/boş);
   isteğe bağlı olarak ROI başına özel değişim eşiği (override) — checklist
-  veya referans fotoğrafına tıklayarak seçilebilir
+  veya referans fotoğrafına tıklayarak seçilebilir; ek kamera kanallarının
+  ROI'leri listede `KanalAdı:ROI` şeklinde nitelenmiş görünür
 - Band'ı `.zip` olarak dışa/içe aktarma (başka bir makineye taşımak için)
 - Operatör yönetimi: PIN ile giriş, yeni operatörler yönetici onayı bekler,
   onaylama/silme yetkisi sadece yöneticide
 - Giriş/çıkış ve değişiklik logu görüntüleyici (Excel'e aktarılabilir)
 - Arduino alarm portu listeleme ve otomatik yeniden bağlanma (demo/sunum
   amaçlı donanım entegrasyonu)
+- **Telegram bildirim ayarları** — bot token/chat ID, NG ve kamera bağlantı
+  kopması bildirimlerini ayrı ayrı açma/kapama, emoji reaksiyonuyla NG'yi
+  OK'a çevirme özelliği ve kullanılacak emojinin seçimi
+- **Bildirim alıcıları** — telefon numarası paylaşarak (Telegram "kişi
+  paylaş" akışıyla) birden fazla alıcıyı bildirimlere ekleme/çıkarma
 - Uygulama içi **Testler** sekmesi — pytest suite'ini arayüzü kilitlemeden
   çalıştırıp sonuçları okunabilir isimlerle gösterir
 
@@ -31,11 +41,21 @@ kod İngilizce yazılmıştır.
 - ArUco ile otomatik hizalama; kareler arası titreşimi azaltan yumuşatma ve
   markerlar kaybolup geri geldiğinde otomatik yeniden kalibrasyon (kilit
   oturana kadar "kalibre ediliyor" göstergesi)
+- **Çoklu kamera** tanımlıysa, her kanalın karesi aynı anda işlenir ve
+  görüntüler yan yana birleştirilerek gösterilir; genel OK/NG kararı tüm
+  kanalların tüm gözlerinin birleşiminden hesaplanır (herhangi biri NG ise
+  genel sonuç NG)
 - Kamera bağlantısı koparsa otomatik yeniden bağlanma; disk alanı azaldığında
   uyarı
 - NG (hatalı) durumunda görsel banner + sesli uyarı
+- **Telegram bildirimleri** — NG oluştuğunda fotoğraf ve hangi gözlerin NG
+  olduğu bilgisiyle, kamera bağlantısı koptuğunda ise ayrı bir uyarıyla
+  tanımlı tüm alıcılara mesaj gönderilir; kamera titremesinden kaynaklı
+  yanlış bildirimleri önlemek için ardışık kare onayı (debounce) kullanılır.
+  Gönderilen bir NG mesajına belirlenen emojiyle tepki verilirse kayıt
+  otomatik olarak OK'a çevrilir
 - Debug penceresi: ROI bazında referans/güncel/fark görüntüleri, canlı eşik
-  ayarı
+  ve onay-karesi (confirm frames) ayarı
 - Inspection geçmişi: her OK/NG geçişi SQLite'a (WAL modu, `inspection_log.db`)
   loglanır, NG anındaki kare otomatik kaydedilir
 - Geçmiş penceresi: kayıt tablosu, ROI bazında detay, tek tek ROI düzeltme
@@ -97,9 +117,10 @@ python -m pytest tests/ -v
 
 Core motorlar (ArUco lokalizasyon, karar mantığı, inspection loglama,
 performans-kritik kırpma) ve yapılandırma modülleri (band/model/operatör
-yönetimi, doğrulama, yedekleme, dışa/içe aktarma, loglama) için toplam
-100'ün üzerinde birim testi vardır. `main` dalına her push/PR'da GitHub
-Actions ile otomatik çalışır (`.github/workflows/tests.yml`).
+yönetimi, doğrulama, yedekleme, dışa/içe aktarma, loglama, Telegram
+bildirimleri, çoklu kamera kanalları) için toplam 190'ın üzerinde birim
+testi vardır. `main` dalına her push/PR'da GitHub Actions ile otomatik
+çalışır (`.github/workflows/tests.yml`).
 
 ## Proje Yapısı
 
@@ -112,10 +133,13 @@ apps/
 modules/
   core/                 # UI'dan bağımsız çekirdek: ArUco, lokalizasyon,
                         # perspektif düzeltme, karşılaştırma, karar motoru,
-                        # otomatik ROI tespiti, Arduino iletişimi
-  configuration/         # Band/Model/Operatör yönetimi, inspection logger,
+                        # otomatik ROI tespiti, Arduino iletişimi, Telegram
+                        # bildirim gönderimi ve emoji reaksiyon dinleyicisi
+  configuration/         # Band/Model/Operatör yönetimi, kamera kanalı
+                        # (çoklu açı) tanımları, inspection logger,
                         # doğrulama, yedekleme, NG kare kaydetme,
-                        # Excel/zip dışa-içe aktarma
+                        # Excel/zip dışa-içe aktarma, Telegram ayarları/
+                        # alıcıları
   controllers/           # Core motorları birleştiren, UI'dan bağımsız akış
   utils/                 # Logger (rotasyonlu), disk izleme, erişebilirlik
                         # ayarları, test çalıştırıcı
@@ -128,9 +152,13 @@ modules/
 configuration/
   band_XX/              # Her istasyon için: band.json, roi.json,
                         # reference.png, models/*.json
+                        # cameras/<kanal_id>/roi.json, reference.png
+                        # (ek kamera kanalları, varsa)
                         # (inspection_log.db, ng_captures/ çalışma zamanı
                         # verisidir, operators.json gizli bilgi içerir —
                         # hiçbiri git'e girmez)
+  telegram_settings.json     # Bot token / chat ID (gizli, git'e girmez)
+  telegram_recipients.json   # Kayıtlı bildirim alıcıları (gizli, git'e girmez)
 
 tests/                  # Birim testleri
 ```
@@ -142,4 +170,6 @@ tests/                  # Birim testleri
 - **numpy** — matris/vektör işlemleri
 - **openpyxl** — Excel dışa aktarma
 - **pyserial** — Arduino alarm entegrasyonu (demo)
+- **requests** — Telegram Bot API (bildirim gönderme, emoji reaksiyon
+  dinleme)
 - **pytest** — testler
