@@ -455,6 +455,41 @@ def test_log_exposes_inserted_record_id(logger):
     assert logger.last_inserted_id == logger.fetch_recent()[0]["id"]
 
 
+def test_log_stores_and_retrieves_training_image_paths(logger):
+
+    paths = {
+        "G01": {"reference": "/tmp/g01_ref.png", "current": "/tmp/g01_cur.png"}
+    }
+
+    logger.log(make_result(True), "clio", training_image_paths=paths)
+    record_id = logger.last_inserted_id
+
+    assert logger.get_training_image_paths(record_id) == paths
+
+
+def test_get_training_image_paths_returns_empty_when_not_saved(logger):
+
+    logger.log(make_result(True), "clio")
+    record_id = logger.last_inserted_id
+
+    assert logger.get_training_image_paths(record_id) == {}
+
+
+def test_get_training_image_paths_returns_empty_for_unknown_record(logger):
+
+    assert logger.get_training_image_paths(999999) == {}
+
+
+def test_log_if_changed_passes_through_training_image_paths(logger):
+
+    paths = {"G01": {"reference": "a.png", "current": "b.png"}}
+
+    logger.log_if_changed(make_result(True), "clio", training_image_paths=paths)
+    record_id = logger.last_inserted_id
+
+    assert logger.get_training_image_paths(record_id) == paths
+
+
 def test_set_and_find_telegram_message_id(logger):
 
     logger.log(make_result(False), "clio")

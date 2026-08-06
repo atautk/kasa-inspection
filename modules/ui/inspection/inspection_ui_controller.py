@@ -35,6 +35,7 @@ from modules.configuration.model_recipe_adapter import (
 )
 from modules.configuration.inspection_logger import InspectionLogger
 from modules.configuration.ng_capture_manager import NGCaptureManager
+from modules.configuration.training_data_manager import TrainingDataManager
 from modules.configuration.unknown_kasa_capture_manager import (
     UnknownKasaCaptureManager
 )
@@ -177,6 +178,7 @@ class InspectionUIController:
         self.inspection_controller = None
         self.inspection_logger = None
         self.ng_capture_manager = NGCaptureManager()
+        self.training_data_manager = TrainingDataManager()
         self.unknown_kasa_capture_manager = UnknownKasaCaptureManager()
 
         # ArUco marker ile otomatik model tespiti - bkz.
@@ -1982,6 +1984,41 @@ class InspectionUIController:
     # Kamera Döngüsü
     # -------------------------------------------------
 
+    def _save_training_images(self, combined_results, debug) -> dict:
+        """
+        debug (result["debug"]) sadece BİRİNCİL kameranın ROI'lerini
+        içerir, ham (nitelenmemiş) isimlerle anahtarlanır - bu yüzden
+        v1 kapsamı sadece birincil kameradır (ek kamera kanallarının
+        debug verisi şu an _tick_impl'e hiç ulaşmıyor). Her ROI için
+        referans/canlı kırpmasını, o anki görsel duruma (DOLU/BOŞ)
+        göre TrainingDataManager ile diske kaydeder.
+        """
+
+        if not debug:
+            return {}
+
+        training_image_paths = {}
+
+        for roi_name, compare in debug.items():
+
+            roi_data = combined_results.get(roi_name)
+
+            if roi_data is None:
+                continue
+
+            saved = self.training_data_manager.save(
+                self.current_band,
+                roi_name,
+                roi_data["state"],
+                compare.get("reference"),
+                compare.get("current")
+            )
+
+            if saved is not None:
+                training_image_paths[roi_name] = saved
+
+        return training_image_paths
+
     def _tick(self):
 
         try:
@@ -2129,10 +2166,19 @@ class InspectionUIController:
                     display
                 )
 
+            training_image_paths = None
+
+            if self.current_band.training_data_collection_enabled:
+
+                training_image_paths = self._save_training_images(
+                    combined_results, result.get("debug")
+                )
+
             self.inspection_logger.log(
                 combined_results,
                 model_name,
-                image_path
+                image_path,
+                training_image_paths
             )
 
             if overall_result == "NG":

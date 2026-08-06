@@ -39,6 +39,9 @@ from modules.ui.configurator.shift_settings_dialog import (
 from modules.ui.configurator.reference_reminder_dialog import (
     ReferenceReminderDialog
 )
+from modules.ui.configurator.training_data_settings_dialog import (
+    TrainingDataSettingsDialog
+)
 from modules.configuration.telegram_settings_manager import (
     TelegramSettingsManager
 )
@@ -185,6 +188,10 @@ class ConfiguratorController:
 
         self.window.reference_reminder_action.triggered.connect(
             self.open_reference_reminder
+        )
+
+        self.window.training_data_settings_action.triggered.connect(
+            self.open_training_data_settings
         )
 
         reference_page = self.window.reference_page
@@ -398,6 +405,7 @@ class ConfiguratorController:
         self.window.arduino_settings_action.setEnabled(True)
         self.window.shift_settings_action.setEnabled(True)
         self.window.reference_reminder_action.setEnabled(True)
+        self.window.training_data_settings_action.setEnabled(True)
 
         self.load_reference_tab()
 
@@ -491,6 +499,33 @@ class ConfiguratorController:
             self.operator_name,
             self.current_band.name,
             self.current_band.reference_max_age_days
+        )
+
+    # -------------------------------------------------
+    # Model Eğitimi Veri Toplama
+    # -------------------------------------------------
+
+    def open_training_data_settings(self):
+
+        if self.current_band is None:
+            return
+
+        dialog = TrainingDataSettingsDialog(self.current_band, self.window)
+
+        if dialog.exec() != TrainingDataSettingsDialog.Accepted:
+            return
+
+        self.current_band.training_data_collection_enabled = (
+            dialog.is_enabled()
+        )
+
+        self.band_manager.save_band(self.current_band)
+
+        app_logger.info(
+            "[%s] model eğitimi veri toplama değiştirildi: %s -> %s",
+            self.operator_name,
+            self.current_band.name,
+            self.current_band.training_data_collection_enabled
         )
 
     # -------------------------------------------------

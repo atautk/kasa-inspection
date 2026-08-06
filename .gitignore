@@ -41,5 +41,9 @@ configuration/telegram_queue.json
 # Periyodik özet rapor dosyaları (çalışma zamanı verisi, banda özel)
 telegram_reports/
 
+# Model eğitimi için biriktirilen ROI görüntü çiftleri (çalışma
+# zamanı verisi, banda özel, potansiyel olarak büyük)
+training_data/
+
 # Kamera kalibrasyon çıktıları (istersen bunları sonradan ekleyebilirsin)
 # calibration/*.npy

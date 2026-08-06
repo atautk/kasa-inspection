@@ -45,3 +45,10 @@ class Band:
     # yenilenmediyse hatırlat - ışık/kamera koşulları zamanla
     # kayabilir. 0 = kapalı.
     reference_max_age_days: int = 0
+
+    # Açıksa, her onaylı log olayında ROI bazında referans/canlı
+    # kırpma görüntü çiftleri diske kaydedilir (ileride bir görüntü
+    # sınıflandırma modeli eğitmek için) - bkz. TrainingDataManager.
+    # Varsayılan kapalı: yeni bir disk kullanım davranışı, bilinçli
+    # olarak açılmalı.
+    training_data_collection_enabled: bool = False

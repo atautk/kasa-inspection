@@ -33,6 +33,7 @@ from ..common.horizontal_bar_chart_widget import HorizontalBarChartWidget
 from ..window_utils import restore_or_center, save_geometry
 from modules.configuration.inspection_log_exporter import InspectionLogExporter
 from modules.configuration.backup_manager import BackupManager
+from modules.configuration.training_data_manager import TrainingDataManager
 from modules.utils.logger import get_logger
 from modules.utils import accessibility_settings as a11y
 
@@ -75,6 +76,7 @@ class LogViewerDialog(QDialog):
         self.band = band
         self.log_exporter = InspectionLogExporter()
         self.backup_manager = BackupManager()
+        self.training_data_manager = TrainingDataManager()
         self.rows = []
 
         self.current_record = None
@@ -729,12 +731,27 @@ class LogViewerDialog(QDialog):
         if answer != QMessageBox.Yes:
             return
 
+        record_id = self.current_record["id"]
+
         self.inspection_logger.correct_roi(
-            self.current_record["id"],
+            record_id,
             roi_name,
             True,
             operator_name=self.operator_name
         )
+
+        # Bu ROI için eğitim verisi kaydedilmişse (bkz.
+        # TrainingDataManager), otomatik yeniden etiketleme YAPMIYORUZ -
+        # bir düzeltme görsel tespit hatası da olabilir, model
+        # yapılandırma farkı da. Sadece "elle gözden geçirilmeli" diye
+        # işaretliyoruz.
+        training_image_paths = self.inspection_logger.get_training_image_paths(
+            record_id
+        )
+        roi_training_images = training_image_paths.get(roi_name)
+
+        if roi_training_images:
+            self.training_data_manager.flag_for_review(roi_training_images)
 
         self.reload()
 

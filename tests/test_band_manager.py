@@ -178,6 +178,40 @@ def test_load_band_without_reference_max_age_days_field_defaults(manager):
     assert reloaded.reference_max_age_days == 0
 
 
+def test_new_band_has_training_data_collection_disabled_by_default(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    assert band.training_data_collection_enabled is False
+
+
+def test_training_data_collection_enabled_save_and_load_roundtrip(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    band.training_data_collection_enabled = True
+
+    manager.save_band(band)
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.training_data_collection_enabled is True
+
+
+def test_load_band_without_training_data_collection_field_defaults(manager):
+
+    import json
+
+    band = manager.create_band("Eski Band")
+
+    data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
+    assert "training_data_collection_enabled" not in data
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.training_data_collection_enabled is False
+
+
 def test_new_band_has_no_extra_camera_channels(manager):
 
     band = manager.create_band("Clio Hattı")

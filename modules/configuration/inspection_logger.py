@@ -121,6 +121,13 @@ class InspectionLogger:
                     "ADD COLUMN telegram_message_id INTEGER"
                 )
 
+            if "training_image_paths" not in columns:
+
+                conn.execute(
+                    "ALTER TABLE inspections "
+                    "ADD COLUMN training_image_paths TEXT"
+                )
+
             conn.commit()
 
         finally:
@@ -170,11 +177,18 @@ class InspectionLogger:
         self,
         results: dict,
         model_name: str | None,
-        image_path: str | None = None
+        image_path: str | None = None,
+        training_image_paths: dict | None = None
     ) -> bool:
         """
         Kaydı ekler. Eklenen satırın id'si (Telegram mesaj eşleştirmesi
         gibi sonraki işlemler için) self.last_inserted_id'de bulunur.
+
+        training_image_paths (opsiyonel): {roi_name: {"reference": yol,
+        "current": yol}} - TrainingDataManager.save() ile diske
+        kaydedilmiş ROI görüntü çiftlerinin yolları. Sonradan bir
+        düzeltme geldiğinde (correct_roi) bu kayıtlar bulunup
+        işaretlenebilsin diye satırla birlikte saklanır.
         """
 
         if not results:
@@ -187,7 +201,13 @@ class InspectionLogger:
         self.pending_result = None
         self.pending_count = 0
 
-        self._insert(overall_result, model_name, results, image_path)
+        self._insert(
+            overall_result,
+            model_name,
+            results,
+            image_path,
+            training_image_paths
+        )
 
         return True
 
@@ -195,13 +215,16 @@ class InspectionLogger:
         self,
         results: dict,
         model_name: str | None,
-        image_path: str | None = None
+        image_path: str | None = None,
+        training_image_paths: dict | None = None
     ) -> bool:
 
         if not self.should_log(results):
             return False
 
-        return self.log(results, model_name, image_path)
+        return self.log(
+            results, model_name, image_path, training_image_paths
+        )
 
     # -------------------------------------------------
 
@@ -215,7 +238,14 @@ class InspectionLogger:
 
     # -------------------------------------------------
 
-    def _insert(self, overall_result, model_name, results, image_path=None):
+    def _insert(
+        self,
+        overall_result,
+        model_name,
+        results,
+        image_path=None,
+        training_image_paths=None
+    ):
 
         roi_results = {
             name: {
@@ -234,15 +264,18 @@ class InspectionLogger:
             cursor = conn.execute(
                 """
                 INSERT INTO inspections
-                    (timestamp, model_name, overall_result, roi_results, image_path)
-                VALUES (?, ?, ?, ?, ?)
+                    (timestamp, model_name, overall_result, roi_results,
+                     image_path, training_image_paths)
+                VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
                     datetime.now(timezone.utc).isoformat(),
                     model_name,
                     overall_result,
                     json.dumps(roi_results, ensure_ascii=False),
-                    image_path
+                    image_path,
+                    json.dumps(training_image_paths, ensure_ascii=False)
+                    if training_image_paths else None
                 )
             )
 
@@ -580,6 +613,38 @@ class InspectionLogger:
             conn.close()
 
         return row[0] if row is not None else None
+
+    # -------------------------------------------------
+    # Eğitim Verisi Görüntü Yolları
+    # -------------------------------------------------
+
+    def get_training_image_paths(self, record_id: int) -> dict:
+        """
+        log() sırasında kaydedilmişse, {roi_name: {"reference": yol,
+        "current": yol}} döner. Kayıt yoksa ya da o an için eğitim
+        verisi kaydedilmemişse boş sözlük döner.
+        """
+
+        conn = self._connect()
+
+        try:
+
+            row = conn.execute(
+                "SELECT training_image_paths FROM inspections WHERE id = ?",
+                (record_id,)
+            ).fetchone()
+
+        finally:
+
+            conn.close()
+
+        if row is None or row[0] is None:
+            return {}
+
+        try:
+            return json.loads(row[0])
+        except Exception:
+            return {}
 
     # -------------------------------------------------
     # NG Kaydını İncelenmiş Olarak OK'e Çevir

@@ -173,7 +173,11 @@ class BandManager:
 
             blur_threshold=data.get("blur_threshold", 100.0),
 
-            reference_max_age_days=data.get("reference_max_age_days", 0)
+            reference_max_age_days=data.get("reference_max_age_days", 0),
+
+            training_data_collection_enabled=data.get(
+                "training_data_collection_enabled", False
+            )
 
         )
 
@@ -214,7 +218,10 @@ class BandManager:
             "shift_target_count": band.shift_target_count,
             "shift_duration_hours": band.shift_duration_hours,
             "blur_threshold": band.blur_threshold,
-            "reference_max_age_days": band.reference_max_age_days
+            "reference_max_age_days": band.reference_max_age_days,
+            "training_data_collection_enabled": (
+                band.training_data_collection_enabled
+            )
 
         }
 
