@@ -8,7 +8,13 @@ class ArucoDetector:
 
     VALID_MARKERS = {0, 1, 2, 3}
 
-    def __init__(self):
+    def __init__(self, extra_valid_markers=None):
+
+        # extra_valid_markers: bantta tanımlı modellerin sol-üst tanı
+        # marker ID'leri (bkz. Model.marker_id) - VALID_MARKERS'a
+        # eklenir ki bu ID'ler discard edilmeden tespit edilebilsin.
+        # Verilmezse davranış birebir eskisiyle aynı kalır.
+        self.valid_markers = self.VALID_MARKERS | set(extra_valid_markers or ())
 
         dictionary = cv2.aruco.getPredefinedDictionary(
             cv2.aruco.DICT_ARUCO_ORIGINAL
@@ -39,7 +45,7 @@ class ArucoDetector:
 
             marker_id = int(marker_id)
 
-            if marker_id not in self.VALID_MARKERS:
+            if marker_id not in self.valid_markers:
                 continue
 
             pts = marker_corner.reshape(4, 2)

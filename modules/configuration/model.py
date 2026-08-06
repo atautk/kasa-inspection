@@ -14,3 +14,8 @@ class Model:
     # ROI adı -> bu model için özel değişim eşiği (%). Burada
     # olmayan ROI'ler bandın genel eşiğini kullanır.
     roi_thresholds: dict = field(default_factory=dict)
+
+    # Kasanın sol-üst köşesindeki ArUco marker'ının ID'si - bu ID
+    # görülünce inceleme ekranı otomatik olarak bu modeli seçer.
+    # None = otomatik tespit kapalı (elle seçim gerekir).
+    marker_id: int | None = None

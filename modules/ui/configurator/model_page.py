@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QTableWidgetItem,
     QHeaderView,
     QLineEdit,
+    QSpinBox,
     QPushButton,
     QLabel,
     QGraphicsView,
@@ -99,6 +100,8 @@ class ModelPage(QWidget):
         get_checked_rois() -> list[str]
         get_roi_thresholds() -> dict[str, float]
         clear_roi_checklist()
+        set_marker_id(marker_id: int | None)
+        get_marker_id() -> int | None
         set_status(text)
 
     Controller'ın dinlediği sinyaller:
@@ -180,6 +183,21 @@ class ModelPage(QWidget):
         )
         right_column.addWidget(self.roi_checklist, stretch=1)
 
+        marker_row = QHBoxLayout()
+
+        marker_row.addWidget(
+            QLabel("Sol Üst Tanı Marker ID (opsiyonel):")
+        )
+
+        self.marker_id_input = QSpinBox()
+        self.marker_id_input.setRange(-1, 249)
+        self.marker_id_input.setSpecialValueText("Kullanılmıyor")
+        marker_row.addWidget(self.marker_id_input)
+
+        marker_row.addStretch()
+
+        right_column.addLayout(marker_row)
+
         self.status_label = QLabel("-")
         right_column.addWidget(self.status_label)
 
@@ -236,7 +254,12 @@ class ModelPage(QWidget):
             height,
             rgb.strides[0],
             QImage.Format_RGB888
-        )
+        ).copy()
+
+        # .copy() ZORUNLU: kopyalanmazsa QImage rgb'nin arabelleğini
+        # sarmalar, bu fonksiyon dönünce rgb serbest kalabilir ve
+        # ilk (gecikmeli/async) paint sırasında Qt geçersiz belleğe
+        # erişip "access violation" ile çöker.
 
         pixmap = QPixmap.fromImage(qimage)
 
@@ -409,6 +432,22 @@ class ModelPage(QWidget):
         self.roi_checklist.setRowCount(0)
 
         self._sync_preview_colors()
+
+    # -------------------------------------------------
+    # Tanı Marker ID
+    # -------------------------------------------------
+
+    def set_marker_id(self, marker_id: int | None):
+
+        self.marker_id_input.setValue(
+            -1 if marker_id is None else marker_id
+        )
+
+    def get_marker_id(self) -> int | None:
+
+        value = self.marker_id_input.value()
+
+        return None if value < 0 else value
 
     # -------------------------------------------------
     # Yardımcı

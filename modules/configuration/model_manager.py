@@ -80,6 +80,11 @@ class ModelManager:
             roi_thresholds=data.get(
                 "roi_thresholds",
                 {}
+            ),
+
+            marker_id=data.get(
+                "marker_id",
+                None
             )
 
         )
@@ -106,7 +111,9 @@ class ModelManager:
 
             "expected_rois": model.expected_rois,
 
-            "roi_thresholds": model.roi_thresholds
+            "roi_thresholds": model.roi_thresholds,
+
+            "marker_id": model.marker_id
 
         }
 

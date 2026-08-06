@@ -19,6 +19,9 @@ inspection_log.db
 # NG kareleri (çalışma zamanı verisi, banda özel)
 ng_captures/
 
+# Tanınmayan kasa fotoğrafları (çalışma zamanı verisi, banda özel)
+unknown_kasa_captures/
+
 # Pencere boyutu/konum tercihleri (makineye özel)
 window_settings.ini
 

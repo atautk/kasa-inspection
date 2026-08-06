@@ -1361,6 +1361,7 @@ class ConfiguratorController:
         page.set_roi_shapes(self._read_roi_file())
 
         self.current_model = None
+        page.set_marker_id(None)
 
         page.set_status(f"{len(models)} model bulundu.")
 
@@ -1376,6 +1377,7 @@ class ConfiguratorController:
 
             self.current_model = None
             page.clear_roi_checklist()
+            page.set_marker_id(None)
             return
 
         self.current_model = self.model_manager.load_model(
@@ -1390,6 +1392,8 @@ class ConfiguratorController:
             self.current_model.expected_rois,
             self.current_model.roi_thresholds
         )
+
+        page.set_marker_id(self.current_model.marker_id)
 
         page.set_status(f"{self.current_model.name} yüklendi.")
 
@@ -1509,6 +1513,47 @@ class ConfiguratorController:
             page.get_roi_thresholds()
         )
 
+        marker_id = page.get_marker_id()
+
+        if marker_id in (1, 2, 3):
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Uyarı",
+
+                "1, 2, 3 sabit köşe marker'ları için ayrılmıştır, "
+                "tanı ID'si olarak kullanılamaz."
+
+            )
+
+            return
+
+        if marker_id is not None:
+
+            for other in self.model_manager.list_models(self.current_band):
+
+                if (
+                    other.id != self.current_model.id
+                    and other.marker_id == marker_id
+                ):
+
+                    QMessageBox.warning(
+
+                        self.window,
+
+                        "Uyarı",
+
+                        f"Marker ID {marker_id} zaten '{other.name}' "
+                        "modelinde kullanılıyor."
+
+                    )
+
+                    return
+
+        self.current_model.marker_id = marker_id
+
         self.model_manager.save_model(
             self.current_band,
             self.current_model
@@ -1516,12 +1561,13 @@ class ConfiguratorController:
 
         app_logger.info(
             "[%s] model kaydedildi: %s / %s -> beklenen ROI'ler: %s, "
-            "eşik override'ları: %s",
+            "eşik override'ları: %s, marker ID: %s",
             self.operator_name,
             self.current_band.name,
             self.current_model.name,
             self.current_model.expected_rois,
-            self.current_model.roi_thresholds
+            self.current_model.roi_thresholds,
+            self.current_model.marker_id
         )
 
         page.set_status(

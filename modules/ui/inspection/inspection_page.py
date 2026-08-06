@@ -116,6 +116,17 @@ class InspectionPage(QWidget):
         self.reference_age_warning_banner.hide()
         root.addWidget(self.reference_age_warning_banner)
 
+        # ---------- Tanınmayan Kasa Bilgisi ----------
+
+        self.unknown_kasa_banner = QLabel("")
+        self.unknown_kasa_banner.setAlignment(Qt.AlignCenter)
+        self.unknown_kasa_banner.setStyleSheet(
+            "background-color: #3465a4; color: white; "
+            "font-size: 14px; font-weight: bold; padding: 6px;"
+        )
+        self.unknown_kasa_banner.hide()
+        root.addWidget(self.unknown_kasa_banner)
+
         # ---------- Ana Satır: Ne Çalıştırılacak ----------
 
         selection_row = QHBoxLayout()
@@ -455,3 +466,16 @@ class InspectionPage(QWidget):
     def hide_reference_age_warning(self):
 
         self.reference_age_warning_banner.hide()
+
+    # -------------------------------------------------
+    # Tanınmayan Kasa Bilgisi
+    # -------------------------------------------------
+
+    def show_unknown_kasa_warning(self, text: str):
+
+        self.unknown_kasa_banner.setText(text)
+        self.unknown_kasa_banner.show()
+
+    def hide_unknown_kasa_warning(self):
+
+        self.unknown_kasa_banner.hide()

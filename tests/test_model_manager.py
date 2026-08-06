@@ -77,6 +77,43 @@ def test_load_model_without_roi_thresholds_field_defaults_to_empty(
     assert model.roi_thresholds == {}
 
 
+def test_create_model_has_no_marker_id_by_default(manager, band):
+
+    model = manager.create_model(band, "Clio")
+
+    assert model.marker_id is None
+
+
+def test_save_and_load_roundtrip_preserves_marker_id(manager, band):
+
+    model = manager.create_model(band, "Clio")
+
+    model.marker_id = 4
+    manager.save_model(band, model)
+
+    reloaded = manager.load_model(band, model.id)
+
+    assert reloaded.marker_id == 4
+
+
+def test_load_model_without_marker_id_field_defaults_to_none(manager, band):
+
+    import json
+
+    file = band.models / "eski.json"
+    file.write_text(
+        json.dumps({
+            "id": "eski", "name": "Eski Model", "version": "1.0",
+            "expected_rois": ["G01"], "roi_thresholds": {}
+        }),
+        encoding="utf-8"
+    )
+
+    model = manager.load_model(band, "eski")
+
+    assert model.marker_id is None
+
+
 def test_load_missing_model_raises(manager, band):
 
     with pytest.raises(FileNotFoundError):

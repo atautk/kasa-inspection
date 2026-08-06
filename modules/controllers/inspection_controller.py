@@ -63,6 +63,8 @@ class InspectionController:
 
                 "markers": {},
 
+                "identity_marker_id": None,
+
                 "localization": None,
 
                 "results": {},
@@ -78,6 +80,8 @@ class InspectionController:
         reference = frame_data["reference"]
 
         markers = frame_data["markers"]
+
+        identity_marker_id = frame_data["identity_marker_id"]
 
         localization = frame_data["localization"]
 
@@ -100,6 +104,8 @@ class InspectionController:
                 "reference_display": None,
 
                 "markers": markers,
+
+                "identity_marker_id": identity_marker_id,
 
                 "localization": localization,
 
@@ -130,6 +136,8 @@ class InspectionController:
                 "reference_display": reference,
 
                 "markers": markers,
+
+                "identity_marker_id": identity_marker_id,
 
                 "localization": localization,
 
@@ -169,6 +177,8 @@ class InspectionController:
 
                 "markers": markers,
 
+                "identity_marker_id": identity_marker_id,
+
                 "localization": localization,
 
                 "results": {},
@@ -200,6 +210,8 @@ class InspectionController:
             "reference_display": reference_display,
 
             "markers": markers,
+
+            "identity_marker_id": identity_marker_id,
 
             "localization": localization,
 
