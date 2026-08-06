@@ -116,3 +116,85 @@ def test_clear_removes_training_data_folder(tmp_path):
     manager.clear(band)
 
     assert not (band.root / TrainingDataManager.FOLDER_NAME).exists()
+
+
+# -------------------------------------------------
+# compute_summary
+# -------------------------------------------------
+
+def test_compute_summary_empty_when_no_data(tmp_path):
+
+    manager = TrainingDataManager()
+    band = _band(tmp_path)
+
+    assert manager.compute_summary(band) == {}
+
+
+def test_compute_summary_counts_pairs_per_roi_and_state(tmp_path):
+
+    manager = TrainingDataManager()
+    band = _band(tmp_path)
+
+    manager.save(band, "G01", "FULL", _crop(), _crop())
+    manager.save(band, "G01", "FULL", _crop(), _crop())
+    manager.save(band, "G01", "EMPTY", _crop(), _crop())
+    manager.save(band, "G02", "FULL", _crop(), _crop())
+
+    summary = manager.compute_summary(band)
+
+    assert summary["G01"]["FULL"]["count"] == 2
+    assert summary["G01"]["EMPTY"]["count"] == 1
+    assert summary["G02"]["FULL"]["count"] == 1
+    assert "EMPTY" not in summary["G02"]
+
+
+def test_compute_summary_counts_flagged_files(tmp_path):
+
+    manager = TrainingDataManager()
+    band = _band(tmp_path)
+
+    saved = manager.save(band, "G01", "FULL", _crop(), _crop())
+    manager.save(band, "G01", "FULL", _crop(), _crop())
+
+    manager.flag_for_review(saved)
+
+    summary = manager.compute_summary(band)
+
+    assert summary["G01"]["FULL"]["count"] == 2
+    assert summary["G01"]["FULL"]["flagged"] == 1
+
+
+# -------------------------------------------------
+# assess_sufficiency
+# -------------------------------------------------
+
+def test_assess_sufficiency_zero_is_none():
+
+    manager = TrainingDataManager()
+
+    assert manager.assess_sufficiency(0) == "Veri yok"
+
+
+def test_assess_sufficiency_tiers():
+
+    manager = TrainingDataManager()
+
+    assert manager.assess_sufficiency(10) == "Çok az"
+    assert manager.assess_sufficiency(100) == "Az"
+    assert manager.assess_sufficiency(300) == "Makul"
+    assert manager.assess_sufficiency(1000) == "Yeterli"
+
+
+def test_assess_sufficiency_boundaries():
+
+    manager = TrainingDataManager()
+
+    assert manager.assess_sufficiency(
+        TrainingDataManager.INSUFFICIENT_THRESHOLD
+    ) == "Az"
+    assert manager.assess_sufficiency(
+        TrainingDataManager.LOW_THRESHOLD
+    ) == "Makul"
+    assert manager.assess_sufficiency(
+        TrainingDataManager.ADEQUATE_THRESHOLD
+    ) == "Yeterli"
