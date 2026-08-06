@@ -231,6 +231,15 @@ class LogViewerDialog(QDialog):
 
         stats_layout.addLayout(overview_row)
 
+        # ---------- Vardiya Bazında NG Oranı ----------
+
+        stats_layout.addWidget(
+            QLabel("Vardiya Bazlı NG Oranı Trendi (son 20 vardiya):")
+        )
+
+        self.shift_trend_chart = TrendChartWidget()
+        stats_layout.addWidget(self.shift_trend_chart)
+
         # ---------- Model Bazında ----------
 
         model_header_row = QHBoxLayout()
@@ -515,6 +524,16 @@ class LogViewerDialog(QDialog):
 
         self.trend_chart.set_data(
             self.inspection_logger.compute_daily_trend(30)
+        )
+
+        shift_duration_hours = (
+            self.band.shift_duration_hours if self.band is not None else 8.0
+        )
+
+        self.shift_trend_chart.set_data(
+            self.inspection_logger.compute_shift_trend(
+                shift_duration_hours, limit_shifts=20
+            )
         )
 
         self._fill_stats_table(self.model_stats_table, stats["by_model"])
@@ -804,7 +823,12 @@ class LogViewerDialog(QDialog):
             height,
             rgb.strides[0],
             QImage.Format_RGB888
-        )
+        ).copy()
+
+        # .copy() ZORUNLU: kopyalanmazsa QImage rgb'nin arabelleğini
+        # sarmalar, bu fonksiyon dönünce rgb serbest kalabilir ve
+        # ilk (gecikmeli/async) paint sırasında Qt geçersiz belleğe
+        # erişip "access violation" ile çöker.
 
         pixmap = QPixmap.fromImage(qimage).scaled(
             self.image_label.width(),

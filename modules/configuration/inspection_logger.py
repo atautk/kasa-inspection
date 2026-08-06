@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from .band import Band
 
@@ -438,6 +438,99 @@ class InspectionLogger:
                 "total": total,
                 "ok": day_stats["ok"],
                 "ng": day_stats["ng"],
+                "ng_ratio": ratio
+            })
+
+        return trend
+
+    # -------------------------------------------------
+    # Vardiya Bazlı NG Oranı Trendi
+    # -------------------------------------------------
+    #
+    # Geçmiş vardiyaların ne zaman başladığı hiçbir yerde
+    # saklanmıyor (InspectionUIController.shift_start_time sadece
+    # o an çalışan oturum için bellekte tutulur, kalıcı değildir).
+    # Bu yüzden vardiya sınırları, gece yarısından başlayarak
+    # shift_duration_hours'a göre HESAPLANIR (ör. 8 saatlik
+    # vardiyalarda 00:00-08:00 / 08:00-16:00 / 16:00-24:00) -
+    # klasik 3 vardiyalı üretim düzenine denk gelir ve yeni bir
+    # kalıcı depolamaya ihtiyaç duymadan geçmişe dönük hesaplanabilir.
+
+    def compute_shift_trend(
+        self,
+        shift_duration_hours: float,
+        limit_shifts: int = 20
+    ) -> list:
+
+        if shift_duration_hours <= 0:
+            shift_duration_hours = 8.0
+
+        conn = self._connect()
+
+        try:
+
+            conn.row_factory = sqlite3.Row
+
+            rows = conn.execute(
+                "SELECT timestamp, overall_result FROM inspections "
+                "ORDER BY id"
+            ).fetchall()
+
+        finally:
+
+            conn.close()
+
+        shifts = {}
+
+        for row in rows:
+
+            try:
+                local_dt = datetime.fromisoformat(row["timestamp"]).astimezone()
+            except Exception:
+                continue
+
+            day_start = local_dt.replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+            hours_since_midnight = (
+                (local_dt - day_start).total_seconds() / 3600
+            )
+
+            shift_index = int(hours_since_midnight // shift_duration_hours)
+
+            shift_start = day_start + timedelta(
+                hours=shift_index * shift_duration_hours
+            )
+
+            shift_key = shift_start.isoformat()
+
+            shift_stats = shifts.setdefault(
+                shift_key, {"start": shift_start, "ok": 0, "ng": 0}
+            )
+
+            if row["overall_result"] == "OK":
+                shift_stats["ok"] += 1
+            else:
+                shift_stats["ng"] += 1
+
+        shift_keys = sorted(shifts.keys())[-limit_shifts:]
+
+        trend = []
+
+        for shift_key in shift_keys:
+
+            shift_stats = shifts[shift_key]
+
+            total = shift_stats["ok"] + shift_stats["ng"]
+
+            ratio = (shift_stats["ng"] / total * 100) if total else 0.0
+
+            trend.append({
+                "date": shift_stats["start"].strftime("%Y-%m-%d %H:%M"),
+                "total": total,
+                "ok": shift_stats["ok"],
+                "ng": shift_stats["ng"],
                 "ng_ratio": ratio
             })
 

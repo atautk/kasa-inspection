@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timedelta
 
 import pytest
 
@@ -317,6 +318,123 @@ def test_compute_period_stats_matches_compute_stats_shape(logger):
     assert set(stats.keys()) == {
         "total", "ok_count", "ng_count", "by_model", "by_roi"
     }
+
+
+def _local_iso(hour, minute=0, day_offset=0):
+    """
+    Yerel saatte (makine hangi zaman diliminde olursa olsun) belirli
+    bir saat/dakikaya denk gelen bir ISO zaman damgası üretir - bu
+    sayede compute_shift_trend'in kullandığı .astimezone() dönüşümü
+    testte de aynı yerel saati verir, test makinesinin zaman dilimine
+    bağımlı olmadan.
+    """
+
+    now = datetime.now().astimezone()
+
+    dt = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+
+    if day_offset:
+        dt = dt + timedelta(days=day_offset)
+
+    return dt.isoformat()
+
+
+def _set_timestamp(logger, record_id, iso_timestamp):
+
+    conn = logger._connect()
+    conn.execute(
+        "UPDATE inspections SET timestamp = ? WHERE id = ?",
+        (iso_timestamp, record_id)
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_shift_trend_buckets_by_shift_duration(logger):
+
+    logger.log(make_result(True), "clio")
+    id_morning = logger.last_inserted_id
+
+    logger.log(make_result(False), "clio")
+    id_afternoon = logger.last_inserted_id
+
+    # 8 saatlik vardiyalarda: 02:00 -> 00:00-08:00 vardiyası,
+    # 10:00 -> 08:00-16:00 vardiyası (farklı vardiyalar).
+    _set_timestamp(logger, id_morning, _local_iso(hour=2))
+    _set_timestamp(logger, id_afternoon, _local_iso(hour=10))
+
+    trend = logger.compute_shift_trend(shift_duration_hours=8.0)
+
+    assert len(trend) == 2
+    assert trend[0]["ok"] == 1 and trend[0]["ng"] == 0
+    assert trend[1]["ok"] == 0 and trend[1]["ng"] == 1
+
+
+def test_shift_trend_same_shift_aggregates_together(logger):
+
+    logger.log(make_result(True), "clio")
+    id_a = logger.last_inserted_id
+
+    logger.log(make_result(False), "clio")
+    id_b = logger.last_inserted_id
+
+    # İkisi de aynı 00:00-08:00 vardiyasında.
+    _set_timestamp(logger, id_a, _local_iso(hour=1))
+    _set_timestamp(logger, id_b, _local_iso(hour=6))
+
+    trend = logger.compute_shift_trend(shift_duration_hours=8.0)
+
+    assert len(trend) == 1
+    assert trend[0]["total"] == 2
+    assert trend[0]["ok"] == 1
+    assert trend[0]["ng"] == 1
+    assert trend[0]["ng_ratio"] == 50.0
+
+
+def test_shift_trend_date_label_matches_shift_start(logger):
+
+    logger.log(make_result(True), "clio")
+
+    _set_timestamp(logger, logger.last_inserted_id, _local_iso(hour=10))
+
+    trend = logger.compute_shift_trend(shift_duration_hours=8.0)
+
+    # 10:00 -> 08:00-16:00 vardiyası, etiket vardiyanın BAŞLANGICI olmalı
+    assert trend[0]["date"].endswith("08:00")
+
+
+def test_shift_trend_respects_limit_shifts(logger):
+
+    for hour in (0, 8, 16):
+
+        logger.log(make_result(True), "clio")
+        _set_timestamp(
+            logger, logger.last_inserted_id, _local_iso(hour=hour)
+        )
+
+    trend = logger.compute_shift_trend(
+        shift_duration_hours=8.0, limit_shifts=2
+    )
+
+    assert len(trend) == 2
+
+
+def test_shift_trend_non_positive_duration_falls_back_to_default(logger):
+
+    logger.log(make_result(True), "clio")
+    _set_timestamp(logger, logger.last_inserted_id, _local_iso(hour=2))
+
+    trend_zero = logger.compute_shift_trend(shift_duration_hours=0)
+    trend_negative = logger.compute_shift_trend(shift_duration_hours=-5)
+    trend_default = logger.compute_shift_trend(shift_duration_hours=8.0)
+
+    assert trend_zero == trend_default
+    assert trend_negative == trend_default
+
+
+def test_shift_trend_empty_when_no_records(logger):
+
+    assert logger.compute_shift_trend(shift_duration_hours=8.0) == []
 
 
 def test_clear_removes_all_records_and_resets_state(logger):
