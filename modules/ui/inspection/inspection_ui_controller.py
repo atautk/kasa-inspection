@@ -36,6 +36,7 @@ from modules.configuration.model_recipe_adapter import (
 from modules.configuration.inspection_logger import InspectionLogger
 from modules.configuration.ng_capture_manager import NGCaptureManager
 from modules.configuration.training_data_manager import TrainingDataManager
+from modules.configuration.backup_manager import BackupManager
 from modules.configuration.unknown_kasa_capture_manager import (
     UnknownKasaCaptureManager
 )
@@ -50,6 +51,7 @@ from modules.configuration.telegram_recipients_manager import (
 from modules.ui.roi_manager import ROIManager
 from modules.ui.inspection.debug_dialog import DebugDialog
 from modules.ui.inspection.log_viewer_dialog import LogViewerDialog
+from modules.ui.window_utils import get_app_settings
 
 from modules.controllers.inspection_controller import InspectionController
 from modules.utils.logger import get_logger
@@ -101,6 +103,17 @@ class InspectionUIController:
     # gerek yok; hatırlatma da günde bir defadan fazla tekrar etmesin.
     REFERENCE_AGE_CHECK_INTERVAL_SECONDS = 3600.0
     REFERENCE_AGE_WARNING_COOLDOWN_SECONDS = 86400.0
+
+    # Otomatik yedeklemenin gerçek sıklığı band.auto_backup_interval_hours
+    # ile belirlenir - bu sadece o kontrolün ne sıklıkla yapılacağı
+    # (saatlik kontrol, dakikalık hassasiyete gerek yok).
+    BACKUP_CHECK_INTERVAL_SECONDS = 3600.0
+
+    # Son kullanılan band/model/çalışma durumunu makine ayarlarında
+    # (window_settings.ini) saklamak için kullanılan anahtar öneki -
+    # bkz. _save_session_band/_save_session_model/_save_session_running,
+    # otomatik toparlanma (crash/elektrik kesintisi sonrası).
+    SESSION_SETTINGS_KEY = "inspection_session"
 
     # ArUco marker ile otomatik model tespiti: yanlış okumadan (tek
     # kare titremesi) dolayı model aniden değişmesin diye aynı
@@ -179,6 +192,10 @@ class InspectionUIController:
         self.inspection_logger = None
         self.ng_capture_manager = NGCaptureManager()
         self.training_data_manager = TrainingDataManager()
+        self.backup_manager = BackupManager()
+
+        self._backup_thread = None
+        self._last_backup_check_attempt = 0.0
         self.unknown_kasa_capture_manager = UnknownKasaCaptureManager()
 
         # ArUco marker ile otomatik model tespiti - bkz.
@@ -267,6 +284,87 @@ class InspectionUIController:
         )
 
     # -------------------------------------------------
+    # Oturum Durumu (Otomatik Toparlanma)
+    # -------------------------------------------------
+    #
+    # Bilgisayar elektrik kesintisi/çökme sonrası yeniden açıldığında,
+    # PIN girişi hâlâ gereklidir (güvenlik/hesap verebilirlik için) -
+    # ama biri giriş yapar yapmaz, son kullanılan band/model otomatik
+    # seçilir ve inceleme çalışıyor idiyse otomatik Başlat'a basılmış
+    # gibi devam eder. "Çalışıyor idiyse" hem gerçek bir çökmeyi hem
+    # de operatörün Durdur'a basmadan pencereyi kapatmasını aynı
+    # şekilde ele alır - ikisini ayırt etmek güvenilir değildir.
+
+    def _save_session_band(self):
+
+        settings = get_app_settings()
+
+        settings.setValue(
+            f"{self.SESSION_SETTINGS_KEY}/last_band_id",
+            self.current_band.id if self.current_band is not None else None
+        )
+
+    def _save_session_model(self):
+
+        settings = get_app_settings()
+
+        settings.setValue(
+            f"{self.SESSION_SETTINGS_KEY}/last_model_id",
+            self.current_model.id
+            if self.current_model is not None else None
+        )
+
+    def _save_session_running(self, running: bool):
+
+        settings = get_app_settings()
+
+        settings.setValue(
+            f"{self.SESSION_SETTINGS_KEY}/was_running", running
+        )
+
+    def _load_session_state(self) -> dict:
+
+        settings = get_app_settings()
+
+        return {
+            "last_band_id": settings.value(
+                f"{self.SESSION_SETTINGS_KEY}/last_band_id", None
+            ),
+            "last_model_id": settings.value(
+                f"{self.SESSION_SETTINGS_KEY}/last_model_id", None
+            ),
+            "was_running": settings.value(
+                f"{self.SESSION_SETTINGS_KEY}/was_running",
+                False,
+                type=bool
+            )
+        }
+
+    def _index_of_band_id(self, band_id):
+
+        if band_id is None:
+            return None
+
+        for index, band in enumerate(self.bands):
+
+            if band.id == band_id:
+                return index
+
+        return None
+
+    def _index_of_model_id(self, model_id):
+
+        if model_id is None:
+            return None
+
+        for index, model in enumerate(self.models):
+
+            if model.id == model_id:
+                return index
+
+        return None
+
+    # -------------------------------------------------
     # Band / Model Yükleme
     # -------------------------------------------------
 
@@ -278,10 +376,25 @@ class InspectionUIController:
             [band.name for band in self.bands]
         )
 
-        if self.bands:
-            self._select_band(0)
-        else:
+        if not self.bands:
             self.page.set_status("Hiç band bulunamadı")
+            return
+
+        session_state = self._load_session_state()
+
+        index = self._index_of_band_id(session_state["last_band_id"])
+
+        if index is None:
+            index = 0
+
+        self.page.band_combo.blockSignals(True)
+        self.page.band_combo.setCurrentIndex(index)
+        self.page.band_combo.blockSignals(False)
+
+        self._select_band(index)
+
+        if session_state["was_running"]:
+            self._start()
 
     def _select_band(self, index):
 
@@ -289,6 +402,8 @@ class InspectionUIController:
             return
 
         self.current_band = self.bands[index]
+
+        self._save_session_band()
 
         self._warn_if_band_config_invalid(self.current_band)
 
@@ -334,7 +449,22 @@ class InspectionUIController:
         )
 
         if self.models:
-            self._select_model(0)
+
+            session_state = self._load_session_state()
+
+            model_index = self._index_of_model_id(
+                session_state["last_model_id"]
+            )
+
+            if model_index is None:
+                model_index = 0
+
+            self.page.model_combo.blockSignals(True)
+            self.page.model_combo.setCurrentIndex(model_index)
+            self.page.model_combo.blockSignals(False)
+
+            self._select_model(model_index)
+
         else:
             self.current_model = None
             self.recipe_manager = ModelRecipeAdapter(None)
@@ -419,6 +549,8 @@ class InspectionUIController:
             return
 
         self.current_model = self.models[index]
+
+        self._save_session_model()
 
         self.recipe_manager = ModelRecipeAdapter(self.current_model)
 
@@ -594,6 +726,8 @@ class InspectionUIController:
         self.running = True
         self.camera_connected = True
         self.camera_failure_count = 0
+
+        self._save_session_running(True)
 
         self.page.set_start_button_text("&Durdur")
         self.page.enable_selection(False)
@@ -1280,6 +1414,101 @@ class InspectionUIController:
             )
 
     # -------------------------------------------------
+    # Otomatik Yedekleme
+    # -------------------------------------------------
+
+    def _maybe_run_auto_backup(self):
+        """
+        Bandın otomatik yedekleme ayarı açıksa ve son yedeklemenin
+        üzerinden auto_backup_interval_hours'tan fazla süre geçtiyse,
+        arka planda bir yedekleme başlatır (dosya kopyalama işlemi
+        UI thread'ini bloklamasın diye). Eski yedekler otomatik
+        temizlenir - bkz. BackupManager.backup_and_cleanup.
+        """
+
+        now = time.perf_counter()
+
+        if (
+            now - self._last_backup_check_attempt
+            < self.BACKUP_CHECK_INTERVAL_SECONDS
+        ):
+            return
+
+        self._last_backup_check_attempt = now
+
+        if self.current_band is None:
+            return
+
+        if not self.current_band.auto_backup_enabled:
+            return
+
+        destination = self.current_band.auto_backup_destination
+
+        if not destination:
+            return
+
+        now_utc = datetime.now(timezone.utc)
+
+        if self.current_band.last_auto_backup_at:
+
+            try:
+
+                last_backup_at = datetime.fromisoformat(
+                    self.current_band.last_auto_backup_at
+                )
+
+                elapsed_hours = (
+                    (now_utc - last_backup_at).total_seconds() / 3600
+                )
+
+                if elapsed_hours < self.current_band.auto_backup_interval_hours:
+                    return
+
+            except Exception:
+                pass
+
+        if (
+            self._backup_thread is not None
+            and self._backup_thread.is_alive()
+        ):
+            return
+
+        band = self.current_band
+        keep_count = band.auto_backup_keep_count
+
+        def _run():
+
+            try:
+
+                self.backup_manager.backup_and_cleanup(
+                    band, destination, keep_count
+                )
+
+            except Exception as e:
+
+                app_logger.warning(
+                    "Otomatik yedekleme başarısız: %s -> %s (%s)",
+                    band.name, destination, e
+                )
+
+                return
+
+            updated_band = self.band_manager.load_band(band.id)
+            updated_band.last_auto_backup_at = now_utc.isoformat()
+            self.band_manager.save_band(updated_band)
+
+            if band is self.current_band:
+                self.current_band.last_auto_backup_at = now_utc.isoformat()
+
+            app_logger.info(
+                "Otomatik yedekleme tamamlandı: %s -> %s",
+                band.name, destination
+            )
+
+        self._backup_thread = threading.Thread(target=_run, daemon=True)
+        self._backup_thread.start()
+
+    # -------------------------------------------------
     # ArUco Marker ile Otomatik Model Tespiti
     # -------------------------------------------------
 
@@ -1714,6 +1943,8 @@ class InspectionUIController:
         self.camera_connected = True
         self.camera_failure_count = 0
 
+        self._save_session_running(False)
+
         self.page.set_start_button_text("&Başlat")
         self.page.enable_selection(True)
         self.page.set_status("Durduruldu")
@@ -2042,6 +2273,7 @@ class InspectionUIController:
         self._maybe_send_periodic_report()
         self._maybe_check_shift_progress()
         self._maybe_check_reference_age()
+        self._maybe_run_auto_backup()
 
         if self.arduino_controller is not None:
 

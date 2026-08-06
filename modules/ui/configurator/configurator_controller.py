@@ -42,6 +42,9 @@ from modules.ui.configurator.reference_reminder_dialog import (
 from modules.ui.configurator.training_data_settings_dialog import (
     TrainingDataSettingsDialog
 )
+from modules.ui.configurator.auto_backup_settings_dialog import (
+    AutoBackupSettingsDialog
+)
 from modules.configuration.telegram_settings_manager import (
     TelegramSettingsManager
 )
@@ -192,6 +195,10 @@ class ConfiguratorController:
 
         self.window.training_data_settings_action.triggered.connect(
             self.open_training_data_settings
+        )
+
+        self.window.auto_backup_settings_action.triggered.connect(
+            self.open_auto_backup_settings
         )
 
         reference_page = self.window.reference_page
@@ -406,6 +413,7 @@ class ConfiguratorController:
         self.window.shift_settings_action.setEnabled(True)
         self.window.reference_reminder_action.setEnabled(True)
         self.window.training_data_settings_action.setEnabled(True)
+        self.window.auto_backup_settings_action.setEnabled(True)
 
         self.load_reference_tab()
 
@@ -526,6 +534,40 @@ class ConfiguratorController:
             self.operator_name,
             self.current_band.name,
             self.current_band.training_data_collection_enabled
+        )
+
+    # -------------------------------------------------
+    # Otomatik Yedekleme
+    # -------------------------------------------------
+
+    def open_auto_backup_settings(self):
+
+        if self.current_band is None:
+            return
+
+        dialog = AutoBackupSettingsDialog(self.current_band, self.window)
+
+        if dialog.exec() != AutoBackupSettingsDialog.Accepted:
+            return
+
+        self.current_band.auto_backup_enabled = dialog.is_enabled()
+        self.current_band.auto_backup_destination = dialog.get_destination()
+        self.current_band.auto_backup_interval_hours = (
+            dialog.get_interval_hours()
+        )
+        self.current_band.auto_backup_keep_count = dialog.get_keep_count()
+
+        self.band_manager.save_band(self.current_band)
+
+        app_logger.info(
+            "[%s] otomatik yedekleme ayarları değiştirildi: %s -> "
+            "açık=%s, hedef=%s, sıklık=%.1f saat, sakla=%d",
+            self.operator_name,
+            self.current_band.name,
+            self.current_band.auto_backup_enabled,
+            self.current_band.auto_backup_destination,
+            self.current_band.auto_backup_interval_hours,
+            self.current_band.auto_backup_keep_count
         )
 
     # -------------------------------------------------

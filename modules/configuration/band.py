@@ -52,3 +52,14 @@ class Band:
     # Varsayılan kapalı: yeni bir disk kullanım davranışı, bilinçli
     # olarak açılmalı.
     training_data_collection_enabled: bool = False
+
+    # Otomatik yedekleme: açıksa, inspection_log.db + ng_captures/
+    # periyodik olarak auto_backup_destination'a kopyalanır - bkz.
+    # BackupManager, InspectionUIController._maybe_run_auto_backup.
+    # keep_count kadar en son yedek tutulur, gerisi otomatik silinir
+    # (0 = temizlik yapma, sınırsız birikir).
+    auto_backup_enabled: bool = False
+    auto_backup_destination: str = ""
+    auto_backup_interval_hours: float = 24.0
+    auto_backup_keep_count: int = 30
+    last_auto_backup_at: str = ""

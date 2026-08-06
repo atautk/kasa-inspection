@@ -177,7 +177,21 @@ class BandManager:
 
             training_data_collection_enabled=data.get(
                 "training_data_collection_enabled", False
-            )
+            ),
+
+            auto_backup_enabled=data.get("auto_backup_enabled", False),
+
+            auto_backup_destination=data.get(
+                "auto_backup_destination", ""
+            ),
+
+            auto_backup_interval_hours=data.get(
+                "auto_backup_interval_hours", 24.0
+            ),
+
+            auto_backup_keep_count=data.get("auto_backup_keep_count", 30),
+
+            last_auto_backup_at=data.get("last_auto_backup_at", "")
 
         )
 
@@ -221,7 +235,12 @@ class BandManager:
             "reference_max_age_days": band.reference_max_age_days,
             "training_data_collection_enabled": (
                 band.training_data_collection_enabled
-            )
+            ),
+            "auto_backup_enabled": band.auto_backup_enabled,
+            "auto_backup_destination": band.auto_backup_destination,
+            "auto_backup_interval_hours": band.auto_backup_interval_hours,
+            "auto_backup_keep_count": band.auto_backup_keep_count,
+            "last_auto_backup_at": band.last_auto_backup_at
 
         }
 

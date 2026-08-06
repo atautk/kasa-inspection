@@ -212,6 +212,53 @@ def test_load_band_without_training_data_collection_field_defaults(manager):
     assert reloaded.training_data_collection_enabled is False
 
 
+def test_new_band_has_auto_backup_disabled_by_default(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    assert band.auto_backup_enabled is False
+    assert band.auto_backup_destination == ""
+    assert band.auto_backup_interval_hours == 24.0
+    assert band.auto_backup_keep_count == 30
+    assert band.last_auto_backup_at == ""
+
+
+def test_auto_backup_settings_save_and_load_roundtrip(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    band.auto_backup_enabled = True
+    band.auto_backup_destination = "D:/yedekler"
+    band.auto_backup_interval_hours = 12.0
+    band.auto_backup_keep_count = 10
+    band.last_auto_backup_at = "2026-08-06T10:00:00+00:00"
+
+    manager.save_band(band)
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.auto_backup_enabled is True
+    assert reloaded.auto_backup_destination == "D:/yedekler"
+    assert reloaded.auto_backup_interval_hours == 12.0
+    assert reloaded.auto_backup_keep_count == 10
+    assert reloaded.last_auto_backup_at == "2026-08-06T10:00:00+00:00"
+
+
+def test_load_band_without_auto_backup_fields_defaults(manager):
+
+    import json
+
+    band = manager.create_band("Eski Band")
+
+    data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
+    assert "auto_backup_enabled" not in data
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.auto_backup_enabled is False
+    assert reloaded.auto_backup_keep_count == 30
+
+
 def test_new_band_has_no_extra_camera_channels(manager):
 
     band = manager.create_band("Clio Hattı")

@@ -37,7 +37,13 @@ def size_and_center(window, width: int, height: int):
     window.move(x, y)
 
 
-def _settings() -> QSettings:
+def get_app_settings() -> QSettings:
+    """
+    Pencere boyutu/konumu gibi makineye özel ayarların hepsinin
+    saklandığı ortak QSettings nesnesi. Başka modüller (ör. son
+    kullanılan band/model bilgisini saklayan inspection oturum
+    durumu) de aynı dosyayı, kendi anahtar öneki altında kullanabilir.
+    """
 
     return QSettings(str(SETTINGS_PATH), QSettings.IniFormat)
 
@@ -53,7 +59,7 @@ def restore_or_center(
     yükler, yoksa ekrana göre ortalanmış varsayılan boyutu kullanır.
     """
 
-    settings = _settings()
+    settings = get_app_settings()
 
     geometry = settings.value(f"{key}/geometry")
 
@@ -68,6 +74,6 @@ def restore_or_center(
 
 def save_geometry(window, key: str):
 
-    settings = _settings()
+    settings = get_app_settings()
 
     settings.setValue(f"{key}/geometry", window.saveGeometry())

@@ -126,6 +126,11 @@ class MainWindow(QMainWindow):
         )
         self.training_data_settings_action.setEnabled(False)
 
+        self.auto_backup_settings_action = management_menu.addAction(
+            "Otomatik Yedekleme..."
+        )
+        self.auto_backup_settings_action.setEnabled(False)
+
     def _open_accessibility_dialog(self):
 
         dialog = AccessibilityDialog(self)
