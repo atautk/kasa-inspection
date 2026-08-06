@@ -98,6 +98,33 @@ class TelegramNotifier:
 
             return None
 
+    def send_document(self, file_path: str, caption: str = ""):
+
+        if not self.is_configured():
+            return None
+
+        try:
+
+            with open(file_path, "rb") as f:
+
+                response = requests.post(
+                    f"https://api.telegram.org/bot{self.bot_token}"
+                    f"/sendDocument",
+                    data={"chat_id": self.chat_id, "caption": caption},
+                    files={"document": f},
+                    timeout=self.TIMEOUT_SECONDS
+                )
+
+            return self._extract_message_id(response, "belge")
+
+        except Exception as e:
+
+            app_logger.warning(
+                "Telegram belgesi gönderilemedi: %s", e
+            )
+
+            return None
+
     def send_contact_request(self, text: str):
         """
         "Kişimi Paylaş" butonlu bir mesaj gönderir (numara eşleştirme
@@ -186,6 +213,17 @@ class TelegramNotifier:
         def _run():
 
             message_id = self.send_photo(image_path, caption)
+
+            if on_sent is not None:
+                on_sent(message_id)
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    def send_document_async(self, file_path: str, caption: str = "", on_sent=None):
+
+        def _run():
+
+            message_id = self.send_document(file_path, caption)
 
             if on_sent is not None:
                 on_sent(message_id)

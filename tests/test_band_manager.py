@@ -71,6 +71,113 @@ def test_load_band_without_confirm_frames_field_defaults_to_three(
     assert reloaded.confirm_frames == 3
 
 
+def test_new_band_has_shift_tracking_disabled_by_default(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    assert band.shift_target_count == 0
+    assert band.shift_duration_hours == 8.0
+
+
+def test_shift_settings_save_and_load_roundtrip(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    band.shift_target_count = 250
+    band.shift_duration_hours = 10.5
+
+    manager.save_band(band)
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.shift_target_count == 250
+    assert reloaded.shift_duration_hours == 10.5
+
+
+def test_load_band_without_shift_fields_defaults(manager):
+
+    import json
+
+    band = manager.create_band("Eski Band")
+
+    data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
+    assert "shift_target_count" not in data
+    assert "shift_duration_hours" not in data
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.shift_target_count == 0
+    assert reloaded.shift_duration_hours == 8.0
+
+
+def test_new_band_has_default_blur_threshold(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    assert band.blur_threshold == 100.0
+
+
+def test_blur_threshold_save_and_load_roundtrip(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    band.blur_threshold = 150.0
+
+    manager.save_band(band)
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.blur_threshold == 150.0
+
+
+def test_load_band_without_blur_threshold_field_defaults(manager):
+
+    import json
+
+    band = manager.create_band("Eski Band")
+
+    data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
+    assert "blur_threshold" not in data
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.blur_threshold == 100.0
+
+
+def test_new_band_has_reference_reminder_disabled_by_default(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    assert band.reference_max_age_days == 0
+
+
+def test_reference_max_age_days_save_and_load_roundtrip(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    band.reference_max_age_days = 30
+
+    manager.save_band(band)
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.reference_max_age_days == 30
+
+
+def test_load_band_without_reference_max_age_days_field_defaults(manager):
+
+    import json
+
+    band = manager.create_band("Eski Band")
+
+    data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
+    assert "reference_max_age_days" not in data
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.reference_max_age_days == 0
+
+
 def test_new_band_has_no_extra_camera_channels(manager):
 
     band = manager.create_band("Clio Hattı")

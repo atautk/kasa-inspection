@@ -111,6 +111,16 @@ class MainWindow(QMainWindow):
         )
         self.arduino_settings_action.setEnabled(False)
 
+        self.shift_settings_action = management_menu.addAction(
+            "Vardiya Ayarları..."
+        )
+        self.shift_settings_action.setEnabled(False)
+
+        self.reference_reminder_action = management_menu.addAction(
+            "Referans Yenileme Hatırlatıcısı..."
+        )
+        self.reference_reminder_action.setEnabled(False)
+
     def _open_accessibility_dialog(self):
 
         dialog = AccessibilityDialog(self)

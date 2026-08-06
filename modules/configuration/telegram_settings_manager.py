@@ -45,7 +45,11 @@ class TelegramSettingsManager:
             notify_on_ng=data.get("notify_on_ng", True),
             notify_on_disconnect=data.get("notify_on_disconnect", True),
             confirm_emoji=data.get("confirm_emoji", default.confirm_emoji),
-            react_to_confirm=data.get("react_to_confirm", False)
+            react_to_confirm=data.get("react_to_confirm", False),
+            daily_report_enabled=data.get("daily_report_enabled", False),
+            last_daily_report_sent_at=data.get(
+                "last_daily_report_sent_at", ""
+            )
         )
 
     # -------------------------------------------------
@@ -60,7 +64,9 @@ class TelegramSettingsManager:
             "notify_on_ng": settings.notify_on_ng,
             "notify_on_disconnect": settings.notify_on_disconnect,
             "confirm_emoji": settings.confirm_emoji,
-            "react_to_confirm": settings.react_to_confirm
+            "react_to_confirm": settings.react_to_confirm,
+            "daily_report_enabled": settings.daily_report_enabled,
+            "last_daily_report_sent_at": settings.last_daily_report_sent_at
         }
 
         with open(self.path, "w", encoding="utf-8") as f:

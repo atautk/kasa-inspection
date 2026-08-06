@@ -29,3 +29,19 @@ class Band:
     # kamera (camera/reference/roi alanları) burada YER ALMAZ - bu
     # sayede tek kameralı bandlar hiç değişmeden çalışmaya devam eder.
     cameras: list = field(default_factory=list)
+
+    # Vardiya bazlı üretim takibi: bir vardiyada üretilmesi beklenen
+    # kasa sayısı ve vardiyanın kaç saat sürdüğü. 0 = kapalı (hiç
+    # takip/uyarı yapılmaz) - bkz. InspectionUIController.
+    shift_target_count: int = 0
+    shift_duration_hours: float = 8.0
+
+    # Kamera netliği uyarısı: Laplacian varyansı bu değerin altına
+    # düşerse görüntü "bulanık" sayılır - bkz. BlurDetector.
+    blur_threshold: float = 100.0
+
+    # Referans fotoğrafı yaşlanma hatırlatıcısı: reference.png (ve
+    # varsa ek kamera kanallarının referansları) bu kadar gündür
+    # yenilenmediyse hatırlat - ışık/kamera koşulları zamanla
+    # kayabilir. 0 = kapalı.
+    reference_max_age_days: int = 0

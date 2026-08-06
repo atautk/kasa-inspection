@@ -1,5 +1,7 @@
 import time
+import threading
 import winsound
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 
 import cv2
@@ -15,6 +17,14 @@ from modules.core.decision_engine import DecisionEngine
 from modules.core.arduino_controller import ArduinoController
 from modules.core.telegram_notifier import TelegramNotifier
 from modules.core.telegram_reaction_poller import TelegramReactionPoller
+from modules.core.telegram_notification_queue import (
+    TelegramNotificationQueue,
+    QueuedNotification
+)
+from modules.configuration.periodic_report_exporter import (
+    PeriodicReportExporter
+)
+from modules.core.blur_detector import BlurDetector
 
 from modules.configuration.band_manager import BandManager
 from modules.configuration.model_manager import ModelManager
@@ -55,6 +65,39 @@ class InspectionUIController:
 
     ARDUINO_RECONNECT_INTERVAL_SECONDS = 5.0
 
+    # Kuyruktaki gönderilemeyen Telegram bildirimlerini tekrar
+    # deneme sıklığı. Çok sık denemek (ör. her karede) bağlantı
+    # koptuğunda Telegram'a gereksiz yük bindirir.
+    TELEGRAM_QUEUE_FLUSH_INTERVAL_SECONDS = 60.0
+
+    # Periyodik özet raporunun ne sıklıkla gönderileceğinin ("her 24
+    # saatte bir") ve bunun ne sıklıkla kontrol edileceğinin
+    # (5 dakikada bir - saatlik hassasiyet yeterli, her karede
+    # kontrol etmeye gerek yok) ayarları.
+    REPORT_PERIOD_HOURS = 24
+    REPORT_CHECK_INTERVAL_SECONDS = 300.0
+
+    # Vardiya ilerlemesinin ne sıklıkla kontrol edileceği, ne kadar
+    # geride kalmanın "normal" sayılacağı (kasa değişim süresi vb.
+    # doğal dalgalanmalar için pay) ve aynı vardiyada bildirimler
+    # arasında en az ne kadar süre olması gerektiği.
+    SHIFT_CHECK_INTERVAL_SECONDS = 60.0
+    SHIFT_PACE_TOLERANCE = 0.2
+    SHIFT_WARNING_COOLDOWN_SECONDS = 3600.0
+
+    # Bulanıklık kontrolünün sıklığı, kaç ardışık kontrolün "sürekli
+    # bulanık" saymak için gerektiği (tek kötü kare/geçici titreme
+    # için uyarmasın diye) ve aynı bağlantı için bildirimler arası
+    # minimum süre.
+    BLUR_CHECK_INTERVAL_SECONDS = 2.0
+    BLUR_STREAK_THRESHOLD = 3
+    BLUR_WARNING_COOLDOWN_SECONDS = 300.0
+
+    # Referans yaşı gün hassasiyetinde değiştiğinden sık kontrole
+    # gerek yok; hatırlatma da günde bir defadan fazla tekrar etmesin.
+    REFERENCE_AGE_CHECK_INTERVAL_SECONDS = 3600.0
+    REFERENCE_AGE_WARNING_COOLDOWN_SECONDS = 86400.0
+
     DISK_WARNING_THRESHOLD_GB = 5.0
     DISK_CHECK_INTERVAL_SECONDS = 60.0
 
@@ -76,6 +119,35 @@ class InspectionUIController:
         self.telegram_recipients_manager = TelegramRecipientsManager(
             Path(band_root) / "telegram_recipients.json"
         )
+        self.telegram_queue = TelegramNotificationQueue(
+            Path(band_root) / "telegram_queue.json"
+        )
+        self._telegram_flush_thread = None
+        self._last_telegram_flush_attempt = 0.0
+
+        self._telegram_report_thread = None
+        self._last_report_check_attempt = 0.0
+
+        # Vardiya bazlı üretim takibi (bkz. _maybe_check_shift_progress).
+        # shift_start_time, _start() ilk çağrıldığında (ya da band
+        # değiştiğinde) ayarlanır; band.shift_target_count == 0 ise
+        # tüm takip/uyarı devre dışı kalır.
+        self.shift_start_time = None
+        self._last_shift_check_attempt = 0.0
+        self._last_shift_warning_at = None
+
+        # Kamera netliği (bulanıklık) takibi - bkz.
+        # _maybe_check_blur. Yanlış NG'lerin bir nedeni kamera odağı/
+        # lens kirliliği olabileceğinden erkenden uyarır.
+        self.blur_detector = BlurDetector()
+        self.blur_streak = 0
+        self._last_blur_check_attempt = 0.0
+        self._last_blur_warning_at = None
+
+        # Referans fotoğrafı yaşlanma hatırlatıcısı - bkz.
+        # _maybe_check_reference_age.
+        self._last_reference_age_check_attempt = 0.0
+        self._last_reference_age_warning_at = None
 
         self.bands = []
         self.models = []
@@ -200,11 +272,26 @@ class InspectionUIController:
 
         self.inspection_logger = InspectionLogger(self.current_band)
 
+        # Band değişince önceki bandın vardiya ilerlemesi anlamsız
+        # kalır - yeni band seçilince sıfırdan başlar.
+        self.shift_start_time = None
+        self._last_shift_warning_at = None
+        self.page.set_shift_progress(None)
+
         if self.debug_dialog is not None:
             self.debug_dialog.set_threshold(self.current_band.threshold)
             self.debug_dialog.set_confirm_frames(
                 self.current_band.confirm_frames
             )
+            self.debug_dialog.set_blur_threshold(
+                self.current_band.blur_threshold
+            )
+
+        self.blur_streak = 0
+        self._last_blur_warning_at = None
+
+        self._last_reference_age_warning_at = None
+        self.page.hide_reference_age_warning()
 
         self.roi_manager.load(self.current_band.roi)
 
@@ -338,6 +425,22 @@ class InspectionUIController:
             value
         )
 
+    def _on_blur_threshold_changed(self, value):
+
+        if self.current_band is None:
+            return
+
+        self.current_band.blur_threshold = value
+
+        self.band_manager.save_band(self.current_band)
+
+        app_logger.info(
+            "[%s] bulanıklık eşiği canlı değiştirildi: %s -> %.1f",
+            self.operator_name,
+            self.current_band.name,
+            value
+        )
+
     def _build_inspection_controller(self):
 
         decision_engine = DecisionEngine()
@@ -436,6 +539,12 @@ class InspectionUIController:
         self._connect_arduino()
         self._start_telegram_reaction_poller()
 
+        # Vardiya, bu banda ilk kez Başlat'a basıldığında başlar.
+        # Aynı vardiya içinde durdurup tekrar başlatmak ilerlemeyi
+        # sıfırlamaz (kısa bir mola vardiyayı bitirmez).
+        if self.shift_start_time is None:
+            self.shift_start_time = datetime.now(timezone.utc)
+
         self.running = True
         self.camera_connected = True
         self.camera_failure_count = 0
@@ -512,16 +621,12 @@ class InspectionUIController:
         # değişmiş/durdurulmuş olabilir).
         logger_at_send_time = self.inspection_logger
 
-        def on_sent(message_id):
+        def on_primary_success(message_id):
 
             # Emoji ile onaylama sadece BİRİNCİL sohbetteki mesaj
             # için destekleniyor (her alıcının kendi mesaj id'sini
             # ayrı ayrı izlemek şimdilik kapsam dışı).
-            if (
-                message_id is not None
-                and record_id is not None
-                and logger_at_send_time is not None
-            ):
+            if record_id is not None and logger_at_send_time is not None:
                 logger_at_send_time.set_telegram_message_id(
                     record_id, message_id
                 )
@@ -530,7 +635,18 @@ class InspectionUIController:
 
             notifier = TelegramNotifier(settings.bot_token, chat_id)
 
-            callback = on_sent if index == 0 else None
+            is_primary = index == 0
+
+            callback = self._telegram_retry_on_failure_callback(
+                kind="photo" if image_path else "message",
+                bot_token=settings.bot_token,
+                chat_id=chat_id,
+                text=caption,
+                image_path=str(image_path) if image_path else "",
+                record_id=record_id,
+                is_primary=is_primary,
+                on_success=on_primary_success if is_primary else None
+            )
 
             if image_path:
                 notifier.send_photo_async(
@@ -538,6 +654,45 @@ class InspectionUIController:
                 )
             else:
                 notifier.send_message_async(caption, on_sent=callback)
+
+    def _telegram_retry_on_failure_callback(
+        self,
+        kind,
+        bot_token,
+        chat_id,
+        text,
+        image_path="",
+        record_id=None,
+        is_primary=False,
+        on_success=None
+    ):
+        """
+        Gönderim başarılıysa (varsa) on_success(message_id) çağırır.
+        Başarısızsa - ağ/Telegram erişilemiyorsa - bildirimi kuyruğa
+        ekler ki bağlantı geri geldiğinde tekrar denensin (bkz.
+        _maybe_flush_telegram_queue).
+        """
+
+        def on_sent(message_id):
+
+            if message_id is not None:
+
+                if on_success is not None:
+                    on_success(message_id)
+
+                return
+
+            self.telegram_queue.enqueue(QueuedNotification(
+                kind=kind,
+                bot_token=bot_token,
+                chat_id=chat_id,
+                text=text,
+                image_path=image_path,
+                record_id=record_id,
+                is_primary=is_primary
+            ))
+
+        return on_sent
 
     def _notify_telegram_disconnect(self, device_name: str):
 
@@ -561,9 +716,522 @@ class InspectionUIController:
 
         for chat_id in chat_ids:
 
+            callback = self._telegram_retry_on_failure_callback(
+                kind="message",
+                bot_token=settings.bot_token,
+                chat_id=chat_id,
+                text=text
+            )
+
             TelegramNotifier(
                 settings.bot_token, chat_id
-            ).send_message_async(text)
+            ).send_message_async(text, on_sent=callback)
+
+    # -------------------------------------------------
+    # Telegram Bildirim Kuyruğunu Boşaltma
+    # -------------------------------------------------
+
+    def _maybe_flush_telegram_queue(self):
+        """
+        Ağ/Telegram erişilemediği için kuyruğa düşmüş bildirimleri
+        tekrar göndermeyi dener. Her karede değil, en fazla
+        TELEGRAM_QUEUE_FLUSH_INTERVAL_SECONDS'te bir - aksi halde
+        bağlantı koptuğunda Telegram'a saniyede onlarca istek atılır.
+        Ağ isteği içerdiğinden her zaman arka plan thread'inde çalışır.
+        """
+
+        now = time.perf_counter()
+
+        if (
+            now - self._last_telegram_flush_attempt
+            < self.TELEGRAM_QUEUE_FLUSH_INTERVAL_SECONDS
+        ):
+            return
+
+        if (
+            self._telegram_flush_thread is not None
+            and self._telegram_flush_thread.is_alive()
+        ):
+            return
+
+        self._last_telegram_flush_attempt = now
+
+        logger_at_flush_time = self.inspection_logger
+
+        def on_message_sent(record_id, message_id):
+
+            if record_id is not None and logger_at_flush_time is not None:
+                logger_at_flush_time.set_telegram_message_id(
+                    record_id, message_id
+                )
+
+        def _run():
+
+            sent_count = self.telegram_queue.flush(
+                notifier_factory=TelegramNotifier,
+                on_message_sent=on_message_sent
+            )
+
+            if sent_count:
+
+                app_logger.info(
+                    "Kuyruktaki %d Telegram bildirimi gönderildi.",
+                    sent_count
+                )
+
+        self._telegram_flush_thread = threading.Thread(
+            target=_run, daemon=True
+        )
+        self._telegram_flush_thread.start()
+
+    # -------------------------------------------------
+    # Periyodik Özet Rapor
+    # -------------------------------------------------
+
+    def _resolve_report_period_start(self, settings, now_utc):
+        """
+        Son rapor ne zaman gönderildiyse ondan bu yana geçen süreye
+        bakar. REPORT_PERIOD_HOURS dolmadıysa None döner (henüz
+        rapor zamanı değil). Hiç gönderilmemişse ya da tarih
+        okunamıyorsa, son REPORT_PERIOD_HOURS'u kapsayan bir rapor
+        için başlangıç noktası döner.
+        """
+
+        if not settings.last_daily_report_sent_at:
+            return now_utc - timedelta(hours=self.REPORT_PERIOD_HOURS)
+
+        try:
+            last_sent = datetime.fromisoformat(
+                settings.last_daily_report_sent_at
+            )
+        except Exception:
+            return now_utc - timedelta(hours=self.REPORT_PERIOD_HOURS)
+
+        elapsed_hours = (now_utc - last_sent).total_seconds() / 3600
+
+        if elapsed_hours < self.REPORT_PERIOD_HOURS:
+            return None
+
+        return last_sent
+
+    def _maybe_send_periodic_report(self):
+        """
+        Ayarlarda açıksa, her REPORT_PERIOD_HOURS saatte bir bandın
+        toplam/OK/NG ve model/ROI bazlı özetini bir Excel dosyası
+        olarak Telegram'a gönderir. Gönderim başarısız olursa (ağ
+        kopuksa) diğer bildirimlerle aynı kuyruğa (telegram_queue)
+        eklenir - kaybolmaz, bağlantı gelince tekrar denenir.
+        """
+
+        now = time.perf_counter()
+
+        if (
+            now - self._last_report_check_attempt
+            < self.REPORT_CHECK_INTERVAL_SECONDS
+        ):
+            return
+
+        self._last_report_check_attempt = now
+
+        if self.inspection_logger is None or self.current_band is None:
+            return
+
+        settings = self.telegram_settings_manager.load()
+
+        if not settings.daily_report_enabled or not settings.is_configured():
+            return
+
+        now_utc = datetime.now(timezone.utc)
+
+        since = self._resolve_report_period_start(settings, now_utc)
+
+        if since is None:
+            return
+
+        if (
+            self._telegram_report_thread is not None
+            and self._telegram_report_thread.is_alive()
+        ):
+            return
+
+        band = self.current_band
+        logger_at_send_time = self.inspection_logger
+        chat_ids = self._telegram_chat_ids(settings.chat_id)
+
+        def _run():
+
+            stats = logger_at_send_time.compute_period_stats(
+                since.isoformat()
+            )
+
+            reports_folder = band.root / "telegram_reports"
+            reports_folder.mkdir(parents=True, exist_ok=True)
+
+            report_path = reports_folder / (
+                f"rapor_{now_utc.strftime('%Y%m%d_%H%M%S')}.xlsx"
+            )
+
+            PeriodicReportExporter().export(
+                stats, report_path, band.name, "Son 24 Saat Özeti"
+            )
+
+            caption = (
+                f"📊 Günlük Özet - {band.name}\n"
+                f"Toplam: {stats['total']} | OK: {stats['ok_count']} | "
+                f"NG: {stats['ng_count']}"
+            )
+
+            for chat_id in chat_ids:
+
+                notifier = TelegramNotifier(settings.bot_token, chat_id)
+
+                message_id = notifier.send_document(
+                    str(report_path), caption=caption
+                )
+
+                if message_id is None:
+
+                    self.telegram_queue.enqueue(QueuedNotification(
+                        kind="document",
+                        bot_token=settings.bot_token,
+                        chat_id=chat_id,
+                        text=caption,
+                        image_path=str(report_path)
+                    ))
+
+            updated_settings = self.telegram_settings_manager.load()
+            updated_settings.last_daily_report_sent_at = (
+                now_utc.isoformat()
+            )
+            self.telegram_settings_manager.save(updated_settings)
+
+        self._telegram_report_thread = threading.Thread(
+            target=_run, daemon=True
+        )
+        self._telegram_report_thread.start()
+
+    # -------------------------------------------------
+    # Vardiya Bazlı Üretim Takibi
+    # -------------------------------------------------
+
+    def _maybe_check_shift_progress(self):
+        """
+        Bandın vardiya hedefi tanımlıysa (shift_target_count > 0),
+        vardiya başlangıcından bu yana kaç kasa incelendiğini
+        (InspectionLogger'a düşen kayıt sayısı - compute_period_stats
+        ile aynı sorgu, periyodik rapor özelliğiyle paylaşılıyor)
+        hesaplar, arayüzde gösterir ve beklenen tempoya göre
+        ciddi şekilde geride kalınmışsa Telegram'dan uyarır.
+        """
+
+        now = time.perf_counter()
+
+        if (
+            now - self._last_shift_check_attempt
+            < self.SHIFT_CHECK_INTERVAL_SECONDS
+        ):
+            return
+
+        self._last_shift_check_attempt = now
+
+        if self.current_band is None or self.inspection_logger is None:
+            return
+
+        if self.shift_start_time is None:
+            return
+
+        target = self.current_band.shift_target_count
+
+        if target <= 0:
+            self.page.set_shift_progress(None)
+            return
+
+        duration_hours = self.current_band.shift_duration_hours
+
+        now_utc = datetime.now(timezone.utc)
+
+        elapsed_hours = (
+            (now_utc - self.shift_start_time).total_seconds() / 3600
+        )
+
+        stats = self.inspection_logger.compute_period_stats(
+            self.shift_start_time.isoformat()
+        )
+        produced = stats["total"]
+
+        self.page.set_shift_progress({
+            "produced": produced,
+            "target": target,
+            "elapsed_hours": elapsed_hours,
+            "duration_hours": duration_hours
+        })
+
+        if duration_hours <= 0:
+            return
+
+        elapsed_fraction = min(elapsed_hours / duration_hours, 1.0)
+        expected_by_now = target * elapsed_fraction
+
+        is_behind = produced < expected_by_now * (1 - self.SHIFT_PACE_TOLERANCE)
+
+        if not is_behind:
+            return
+
+        if (
+            self._last_shift_warning_at is not None
+            and (
+                time.perf_counter() - self._last_shift_warning_at
+                < self.SHIFT_WARNING_COOLDOWN_SECONDS
+            )
+        ):
+            return
+
+        self._last_shift_warning_at = time.perf_counter()
+
+        self._notify_shift_behind_pace(produced, target, expected_by_now)
+
+    def _notify_shift_behind_pace(self, produced, target, expected_by_now):
+
+        settings = self.telegram_settings_manager.load()
+
+        if not settings.is_configured():
+            return
+
+        band_name = (
+            self.current_band.name
+            if self.current_band is not None
+            else "?"
+        )
+
+        text = (
+            f"⏱ Vardiya hedefinin gerisinde - {band_name}\n"
+            f"Üretim: {produced} / {target} "
+            f"(bu saatte beklenen: ~{int(expected_by_now)})"
+        )
+
+        chat_ids = self._telegram_chat_ids(settings.chat_id)
+
+        for chat_id in chat_ids:
+
+            callback = self._telegram_retry_on_failure_callback(
+                kind="message",
+                bot_token=settings.bot_token,
+                chat_id=chat_id,
+                text=text
+            )
+
+            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
+                text, on_sent=callback
+            )
+
+    # -------------------------------------------------
+    # Kamera Netliği (Bulanıklık) Takibi
+    # -------------------------------------------------
+
+    def _maybe_check_blur(self, frame):
+        """
+        Kameradan gelen görüntünün net olup olmadığını periyodik
+        olarak kontrol eder (Laplacian varyansı - bkz. BlurDetector).
+        Tek bir kötü kare (ör. kasa hareket ederken oluşan geçici
+        bulanıklık) uyarı tetiklemez; BLUR_STREAK_THRESHOLD kadar
+        ARDIŞIK kontrolde de bulanık çıkarsa (sürekli bir durum -
+        lens kirli, odak kaymış) arayüzde ve Telegram'da bildirilir.
+        """
+
+        now = time.perf_counter()
+
+        if (
+            now - self._last_blur_check_attempt
+            < self.BLUR_CHECK_INTERVAL_SECONDS
+        ):
+            return
+
+        self._last_blur_check_attempt = now
+
+        if self.current_band is None:
+            return
+
+        sharpness = self.blur_detector.compute_sharpness(frame)
+
+        if self.debug_dialog is not None:
+            self.debug_dialog.set_current_sharpness(sharpness)
+
+        is_blurry = sharpness < self.current_band.blur_threshold
+
+        if is_blurry:
+            self.blur_streak += 1
+        else:
+            self.blur_streak = 0
+            self.page.hide_blur_warning()
+            return
+
+        if self.blur_streak < self.BLUR_STREAK_THRESHOLD:
+            return
+
+        self.page.show_blur_warning(sharpness)
+
+        if (
+            self._last_blur_warning_at is not None
+            and (
+                time.perf_counter() - self._last_blur_warning_at
+                < self.BLUR_WARNING_COOLDOWN_SECONDS
+            )
+        ):
+            return
+
+        self._last_blur_warning_at = time.perf_counter()
+
+        self._notify_blur_detected(sharpness)
+
+    def _notify_blur_detected(self, sharpness):
+
+        settings = self.telegram_settings_manager.load()
+
+        if not settings.is_configured():
+            return
+
+        band_name = (
+            self.current_band.name
+            if self.current_band is not None
+            else "?"
+        )
+
+        text = (
+            f"📷 Kamera görüntüsü bulanık görünüyor - {band_name}\n"
+            f"Netlik: {sharpness:.1f} (eşik: "
+            f"{self.current_band.blur_threshold:.1f}). Lens kirli/"
+            f"buğulu olabilir ya da odak kaymış olabilir."
+        )
+
+        chat_ids = self._telegram_chat_ids(settings.chat_id)
+
+        for chat_id in chat_ids:
+
+            callback = self._telegram_retry_on_failure_callback(
+                kind="message",
+                bot_token=settings.bot_token,
+                chat_id=chat_id,
+                text=text
+            )
+
+            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
+                text, on_sent=callback
+            )
+
+    # -------------------------------------------------
+    # Referans Fotoğrafı Yaşlanma Hatırlatıcısı
+    # -------------------------------------------------
+
+    def _maybe_check_reference_age(self):
+        """
+        Işık/kamera koşulları zamanla kayabileceğinden, referans
+        fotoğrafı (dosyanın son değiştirilme tarihinden bu yana)
+        band.reference_max_age_days'ten daha eskiyse hatırlatır.
+        Birincil kameranın yanı sıra varsa ek kamera kanallarının
+        referansları da kontrol edilir.
+        """
+
+        now = time.perf_counter()
+
+        if (
+            now - self._last_reference_age_check_attempt
+            < self.REFERENCE_AGE_CHECK_INTERVAL_SECONDS
+        ):
+            return
+
+        self._last_reference_age_check_attempt = now
+
+        if self.current_band is None:
+            return
+
+        max_age_days = self.current_band.reference_max_age_days
+
+        if max_age_days <= 0:
+            self.page.hide_reference_age_warning()
+            return
+
+        stale_channels = self._find_stale_reference_channels(max_age_days)
+
+        if not stale_channels:
+            self.page.hide_reference_age_warning()
+            return
+
+        self.page.show_reference_age_warning(
+            f"Referans fotoğrafı eski görünüyor ({max_age_days}+ gün): "
+            f"{', '.join(stale_channels)}"
+        )
+
+        if (
+            self._last_reference_age_warning_at is not None
+            and (
+                time.perf_counter() - self._last_reference_age_warning_at
+                < self.REFERENCE_AGE_WARNING_COOLDOWN_SECONDS
+            )
+        ):
+            return
+
+        self._last_reference_age_warning_at = time.perf_counter()
+
+        self._notify_reference_age(stale_channels, max_age_days)
+
+    def _find_stale_reference_channels(self, max_age_days) -> list:
+
+        stale = []
+
+        if self._is_reference_stale(self.current_band.reference, max_age_days):
+            stale.append("Birincil")
+
+        for channel in self.current_band.cameras:
+
+            if self._is_reference_stale(channel.reference, max_age_days):
+                stale.append(channel.name)
+
+        return stale
+
+    def _is_reference_stale(self, reference_path, max_age_days) -> bool:
+
+        if not reference_path.exists():
+            return False
+
+        age_seconds = time.time() - reference_path.stat().st_mtime
+
+        return age_seconds >= max_age_days * 86400
+
+    def _notify_reference_age(self, stale_channels, max_age_days):
+
+        settings = self.telegram_settings_manager.load()
+
+        if not settings.is_configured():
+            return
+
+        band_name = (
+            self.current_band.name
+            if self.current_band is not None
+            else "?"
+        )
+
+        text = (
+            f"🕒 Referans fotoğrafı eskimiş - {band_name}\n"
+            f"{max_age_days}+ gündür yenilenmedi: "
+            f"{', '.join(stale_channels)}\n"
+            "Işık/kamera koşulları değiştiyse referansı yenilemeyi "
+            "düşünün."
+        )
+
+        chat_ids = self._telegram_chat_ids(settings.chat_id)
+
+        for chat_id in chat_ids:
+
+            callback = self._telegram_retry_on_failure_callback(
+                kind="message",
+                bot_token=settings.bot_token,
+                chat_id=chat_id,
+                text=text
+            )
+
+            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
+                text, on_sent=callback
+            )
 
     # -------------------------------------------------
     # Telegram Reaksiyon ile NG -> OK Düzeltme
@@ -860,6 +1528,8 @@ class InspectionUIController:
         self.page.clear_image()
         self.page.clear_results()
         self.page.hide_ng_alert()
+        self.page.hide_blur_warning()
+        self.blur_streak = 0
         self.last_alert_state = None
 
         if self.debug_dialog is not None:
@@ -913,6 +1583,9 @@ class InspectionUIController:
                 self.debug_dialog.set_confirm_frames(
                     self.current_band.confirm_frames
                 )
+                self.debug_dialog.set_blur_threshold(
+                    self.current_band.blur_threshold
+                )
 
             self.debug_dialog.threshold_spinbox.valueChanged.connect(
                 self._on_threshold_changed
@@ -920,6 +1593,10 @@ class InspectionUIController:
 
             self.debug_dialog.confirm_frames_spinbox.valueChanged.connect(
                 self._on_confirm_frames_changed
+            )
+
+            self.debug_dialog.blur_threshold_spinbox.valueChanged.connect(
+                self._on_blur_threshold_changed
             )
 
             self.debug_dialog.finished.connect(self._on_debug_dialog_closed)
@@ -1134,6 +1811,10 @@ class InspectionUIController:
     def _tick_impl(self):
 
         self._check_disk_space()
+        self._maybe_flush_telegram_queue()
+        self._maybe_send_periodic_report()
+        self._maybe_check_shift_progress()
+        self._maybe_check_reference_age()
 
         if self.arduino_controller is not None:
 
@@ -1171,6 +1852,8 @@ class InspectionUIController:
             return
 
         self.camera_failure_count = 0
+
+        self._maybe_check_blur(frame)
 
         result = self.inspection_controller.process(
             frame,

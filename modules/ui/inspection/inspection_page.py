@@ -94,6 +94,28 @@ class InspectionPage(QWidget):
         self.disk_warning_banner.hide()
         root.addWidget(self.disk_warning_banner)
 
+        # ---------- Kamera Netliği Uyarısı ----------
+
+        self.blur_warning_banner = QLabel("")
+        self.blur_warning_banner.setAlignment(Qt.AlignCenter)
+        self.blur_warning_banner.setStyleSheet(
+            "background-color: #e08a00; color: white; "
+            "font-size: 14px; font-weight: bold; padding: 6px;"
+        )
+        self.blur_warning_banner.hide()
+        root.addWidget(self.blur_warning_banner)
+
+        # ---------- Referans Yaşlanma Uyarısı ----------
+
+        self.reference_age_warning_banner = QLabel("")
+        self.reference_age_warning_banner.setAlignment(Qt.AlignCenter)
+        self.reference_age_warning_banner.setStyleSheet(
+            "background-color: #e08a00; color: white; "
+            "font-size: 14px; font-weight: bold; padding: 6px;"
+        )
+        self.reference_age_warning_banner.hide()
+        root.addWidget(self.reference_age_warning_banner)
+
         # ---------- Ana Satır: Ne Çalıştırılacak ----------
 
         selection_row = QHBoxLayout()
@@ -182,6 +204,9 @@ class InspectionPage(QWidget):
         self.performance_label = QLabel("FPS: - | Süre: -")
         info_row.addWidget(self.performance_label)
 
+        self.shift_label = QLabel("Vardiya: -")
+        info_row.addWidget(self.shift_label)
+
         info_row.addStretch()
 
         self.status_label = QLabel("Durum: -")
@@ -237,7 +262,11 @@ class InspectionPage(QWidget):
             height,
             rgb.strides[0],
             QImage.Format_RGB888
-        )
+        ).copy()
+
+        # .copy() ZORUNLU - bkz. reference_page.py'deki aynı satır:
+        # kopyalanmazsa rgb serbest kalınca resizeEvent tekrar çizerken
+        # Qt geçersiz belleğe erişip çöküyor.
 
         pixmap = QPixmap.fromImage(image).scaled(
             self.image_label.width(),
@@ -334,6 +363,21 @@ class InspectionPage(QWidget):
 
         self.status_label.setText(f"Durum: {text}")
 
+    def set_shift_progress(self, info: dict | None):
+        """
+        info: {"produced", "target", "elapsed_hours", "duration_hours"}
+        ya da vardiya takibi kapalıysa (hedef tanımlı değilse) None.
+        """
+
+        if info is None:
+            self.shift_label.setText("Vardiya: -")
+            return
+
+        self.shift_label.setText(
+            f"Vardiya: {info['produced']} / {info['target']} "
+            f"({info['elapsed_hours']:.1f}s / {info['duration_hours']:.1f}s)"
+        )
+
     # -------------------------------------------------
     # Buton Metinleri
     # -------------------------------------------------
@@ -381,3 +425,33 @@ class InspectionPage(QWidget):
     def hide_disk_warning(self):
 
         self.disk_warning_banner.hide()
+
+    # -------------------------------------------------
+    # Kamera Netliği Uyarısı
+    # -------------------------------------------------
+
+    def show_blur_warning(self, sharpness: float):
+
+        self.blur_warning_banner.setText(
+            f"⚠ Kamera görüntüsü bulanık görünüyor (netlik: "
+            f"{sharpness:.1f}) — lens temiz mi, odak doğru mu kontrol edin"
+        )
+
+        self.blur_warning_banner.show()
+
+    def hide_blur_warning(self):
+
+        self.blur_warning_banner.hide()
+
+    # -------------------------------------------------
+    # Referans Yaşlanma Uyarısı
+    # -------------------------------------------------
+
+    def show_reference_age_warning(self, text: str):
+
+        self.reference_age_warning_banner.setText(f"⚠ {text}")
+        self.reference_age_warning_banner.show()
+
+    def hide_reference_age_warning(self):
+
+        self.reference_age_warning_banner.hide()

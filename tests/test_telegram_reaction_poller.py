@@ -50,6 +50,15 @@ def test_starting_twice_does_not_spawn_second_thread():
 
         poller.stop()
 
+        # Thread'in mock hâlâ aktifken bitmesini bekle - aksi halde
+        # `with` bloğu kapanınca mock geri alınır ve thread'in
+        # sıradaki döngüsü GERÇEK bir ağ isteği atabilir (fake token
+        # ile api.telegram.org'a), bu da testi dakikalarca
+        # yavaşlatabilir/bloklayabilir.
+        deadline = time.time() + 2
+        while first_thread.is_alive() and time.time() < deadline:
+            time.sleep(0.01)
+
 
 def test_handle_update_calls_on_reaction_for_emoji_reactions():
 

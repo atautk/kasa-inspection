@@ -302,6 +302,40 @@ class InspectionLogger:
 
             conn.close()
 
+        return self._aggregate_rows(rows)
+
+    # -------------------------------------------------
+    # Belirli Bir Tarihten Sonraki İstatistikler
+    # -------------------------------------------------
+    #
+    # Periyodik (günlük) Telegram özet raporu için kullanılır -
+    # compute_stats()'in tüm zamanlar yerine sadece since_iso'dan
+    # sonraki kayıtlara bakan hali.
+
+    def compute_period_stats(self, since_iso: str) -> dict:
+
+        conn = self._connect()
+
+        try:
+
+            conn.row_factory = sqlite3.Row
+
+            rows = conn.execute(
+                "SELECT model_name, overall_result, roi_results "
+                "FROM inspections WHERE timestamp >= ?",
+                (since_iso,)
+            ).fetchall()
+
+        finally:
+
+            conn.close()
+
+        return self._aggregate_rows(rows)
+
+    # -------------------------------------------------
+
+    def _aggregate_rows(self, rows) -> dict:
+
         total = len(rows)
         ok_count = 0
         ng_count = 0

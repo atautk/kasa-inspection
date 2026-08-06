@@ -33,6 +33,12 @@ from modules.ui.configurator.camera_channels_dialog import (
 from modules.ui.configurator.arduino_settings_dialog import (
     ArduinoSettingsDialog
 )
+from modules.ui.configurator.shift_settings_dialog import (
+    ShiftSettingsDialog
+)
+from modules.ui.configurator.reference_reminder_dialog import (
+    ReferenceReminderDialog
+)
 from modules.configuration.telegram_settings_manager import (
     TelegramSettingsManager
 )
@@ -51,6 +57,7 @@ from modules.core.localization import LocalizationEngine
 from modules.core.reference_frame import ReferenceFrame
 from modules.core.frame_processor import FrameProcessor
 from modules.core.roi_auto_detector import ROIAutoDetector
+from modules.core.blur_detector import BlurDetector
 
 app_logger = get_logger()
 
@@ -80,6 +87,7 @@ class ConfiguratorController:
         self.localizer = LocalizationEngine()
         self.reference_frame = ReferenceFrame()
         self.roi_auto_detector = ROIAutoDetector()
+        self.blur_detector = BlurDetector()
 
         self.test_runner = TestRunner()
         self.test_runner.finished.connect(self._on_tests_finished)
@@ -169,6 +177,14 @@ class ConfiguratorController:
 
         self.window.arduino_settings_action.triggered.connect(
             self.open_arduino_settings
+        )
+
+        self.window.shift_settings_action.triggered.connect(
+            self.open_shift_settings
+        )
+
+        self.window.reference_reminder_action.triggered.connect(
+            self.open_reference_reminder
         )
 
         reference_page = self.window.reference_page
@@ -380,6 +396,8 @@ class ConfiguratorController:
 
         self.window.camera_channels_action.setEnabled(True)
         self.window.arduino_settings_action.setEnabled(True)
+        self.window.shift_settings_action.setEnabled(True)
+        self.window.reference_reminder_action.setEnabled(True)
 
         self.load_reference_tab()
 
@@ -417,6 +435,62 @@ class ConfiguratorController:
             self.operator_name,
             self.current_band.name,
             self.current_band.arduino_port
+        )
+
+    # -------------------------------------------------
+    # Vardiya Ayarları
+    # -------------------------------------------------
+
+    def open_shift_settings(self):
+
+        if self.current_band is None:
+            return
+
+        dialog = ShiftSettingsDialog(self.current_band, self.window)
+
+        if dialog.exec() != ShiftSettingsDialog.Accepted:
+            return
+
+        self.current_band.shift_target_count = dialog.get_target_count()
+        self.current_band.shift_duration_hours = dialog.get_duration_hours()
+
+        self.band_manager.save_band(self.current_band)
+
+        app_logger.info(
+            "[%s] vardiya ayarları değiştirildi: %s -> hedef %d kasa / "
+            "%.1f saat",
+            self.operator_name,
+            self.current_band.name,
+            self.current_band.shift_target_count,
+            self.current_band.shift_duration_hours
+        )
+
+    # -------------------------------------------------
+    # Referans Yenileme Hatırlatıcısı
+    # -------------------------------------------------
+
+    def open_reference_reminder(self):
+
+        if self.current_band is None:
+            return
+
+        dialog = ReferenceReminderDialog(self.current_band, self.window)
+
+        if dialog.exec() != ReferenceReminderDialog.Accepted:
+            return
+
+        self.current_band.reference_max_age_days = (
+            dialog.get_max_age_days()
+        )
+
+        self.band_manager.save_band(self.current_band)
+
+        app_logger.info(
+            "[%s] referans yenileme hatırlatıcısı değiştirildi: %s -> "
+            "%d gün",
+            self.operator_name,
+            self.current_band.name,
+            self.current_band.reference_max_age_days
         )
 
     # -------------------------------------------------
@@ -959,6 +1033,27 @@ class ConfiguratorController:
 
         if self.last_reference_frame is None:
             return
+
+        if self.current_band is not None:
+
+            sharpness = self.blur_detector.compute_sharpness(
+                self.last_reference_frame
+            )
+
+            if sharpness < self.current_band.blur_threshold:
+
+                answer = QMessageBox.question(
+                    self.window,
+                    "Bulanık Görünüyor",
+                    f"Bu fotoğraf bulanık görünüyor (netlik: "
+                    f"{sharpness:.1f}, eşik: "
+                    f"{self.current_band.blur_threshold:.1f}). Lens "
+                    "kirli/buğulu olabilir ya da odak kaymış olabilir. "
+                    "Yine de kaydetmek istiyor musunuz?"
+                )
+
+                if answer != QMessageBox.Yes:
+                    return
 
         target = self._current_reference_target()
 

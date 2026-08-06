@@ -43,6 +43,56 @@ def test_save_and_load_roundtrip(manager):
     assert reloaded.is_configured() is True
 
 
+def test_default_daily_report_fields(manager):
+
+    settings = manager.load()
+
+    assert settings.daily_report_enabled is False
+    assert settings.last_daily_report_sent_at == ""
+
+
+def test_save_and_load_roundtrip_preserves_daily_report_fields(manager):
+
+    settings = TelegramSettings(
+        bot_token="123:ABC",
+        chat_id="456",
+        daily_report_enabled=True,
+        last_daily_report_sent_at="2026-08-05T12:00:00+00:00"
+    )
+
+    manager.save(settings)
+
+    reloaded = manager.load()
+
+    assert reloaded.daily_report_enabled is True
+    assert reloaded.last_daily_report_sent_at == "2026-08-05T12:00:00+00:00"
+
+
+def test_load_legacy_file_without_daily_report_fields_defaults(manager, tmp_path):
+
+    import json
+
+    # Bu alanlar eklenmeden önce kaydedilmiş eski bir dosyayı simüle et
+    manager.path.parent.mkdir(parents=True, exist_ok=True)
+    manager.path.write_text(
+        json.dumps({
+            "bot_token": "tok",
+            "chat_id": "chat",
+            "notify_on_ng": True,
+            "notify_on_disconnect": True,
+            "confirm_emoji": "✅",
+            "react_to_confirm": False
+        }),
+        encoding="utf-8"
+    )
+
+    settings = manager.load()
+
+    assert settings.daily_report_enabled is False
+    assert settings.last_daily_report_sent_at == ""
+    assert settings.bot_token == "tok"
+
+
 def test_corrupt_file_falls_back_to_defaults(manager):
 
     manager.path.parent.mkdir(parents=True, exist_ok=True)

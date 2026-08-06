@@ -165,7 +165,15 @@ class BandManager:
 
             confirm_frames=data.get("confirm_frames", 3),
 
-            cameras=cameras
+            cameras=cameras,
+
+            shift_target_count=data.get("shift_target_count", 0),
+
+            shift_duration_hours=data.get("shift_duration_hours", 8.0),
+
+            blur_threshold=data.get("blur_threshold", 100.0),
+
+            reference_max_age_days=data.get("reference_max_age_days", 0)
 
         )
 
@@ -201,7 +209,12 @@ class BandManager:
                     ).replace("\\", "/")
                 }
                 for channel in band.cameras
-            ]
+            ],
+
+            "shift_target_count": band.shift_target_count,
+            "shift_duration_hours": band.shift_duration_hours,
+            "blur_threshold": band.blur_threshold,
+            "reference_max_age_days": band.reference_max_age_days
 
         }
 

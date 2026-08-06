@@ -133,6 +133,81 @@ def test_send_photo_missing_file_does_not_raise():
         assert not mock_post.called
 
 
+def test_send_document_success_returns_message_id(tmp_path):
+
+    file_path = tmp_path / "rapor.xlsx"
+    file_path.write_bytes(b"fake xlsx bytes")
+
+    notifier = TelegramNotifier("token", "chat")
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post",
+        return_value=_fake_response(ok=True, message_id=55)
+    ) as mock_post:
+
+        result = notifier.send_document(str(file_path), caption="Rapor")
+
+        assert result == 55
+
+        args, kwargs = mock_post.call_args
+        assert "sendDocument" in args[0]
+        assert kwargs["data"]["caption"] == "Rapor"
+        assert "document" in kwargs["files"]
+
+
+def test_send_document_missing_file_does_not_raise():
+
+    notifier = TelegramNotifier("token", "chat")
+
+    with patch("modules.core.telegram_notifier.requests.post") as mock_post:
+
+        result = notifier.send_document("/does/not/exist.xlsx")
+
+        assert result is None
+        assert not mock_post.called
+
+
+def test_send_document_skips_network_call_when_not_configured():
+
+    notifier = TelegramNotifier("", "")
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post"
+    ) as mock_post:
+
+        result = notifier.send_document("/some/file.xlsx")
+
+        assert result is None
+        assert not mock_post.called
+
+
+def test_send_document_async_invokes_on_sent_callback(tmp_path):
+
+    file_path = tmp_path / "rapor.xlsx"
+    file_path.write_bytes(b"fake xlsx bytes")
+
+    notifier = TelegramNotifier("token", "chat")
+
+    received = []
+
+    with patch(
+        "modules.core.telegram_notifier.requests.post",
+        return_value=_fake_response(ok=True, message_id=321)
+    ):
+
+        notifier.send_document_async(
+            str(file_path),
+            caption="Rapor",
+            on_sent=lambda message_id: received.append(message_id)
+        )
+
+        deadline = time.time() + 2
+        while not received and time.time() < deadline:
+            time.sleep(0.01)
+
+    assert received == [321]
+
+
 def test_send_message_async_runs_in_background_thread():
 
     notifier = TelegramNotifier("token", "chat")

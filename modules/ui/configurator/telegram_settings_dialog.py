@@ -74,6 +74,12 @@ class TelegramSettingsDialog(QDialog):
         )
         layout.addWidget(self.react_to_confirm_checkbox)
 
+        self.daily_report_checkbox = QCheckBox(
+            "Her 24 saatte bir özet rapor gönder (toplam/OK/NG, "
+            "model ve ROI bazlı dağılım - Excel dosyası olarak)"
+        )
+        layout.addWidget(self.daily_report_checkbox)
+
         emoji_row = QHBoxLayout()
         emoji_row.addWidget(QLabel("Onay Emojisi:"))
         self.confirm_emoji_input = QLineEdit()
@@ -128,6 +134,9 @@ class TelegramSettingsDialog(QDialog):
             settings.react_to_confirm
         )
         self.confirm_emoji_input.setText(settings.confirm_emoji)
+        self.daily_report_checkbox.setChecked(
+            settings.daily_report_enabled
+        )
 
     def _current_notifier(self) -> TelegramNotifier:
 
@@ -189,6 +198,9 @@ class TelegramSettingsDialog(QDialog):
         )
         settings.react_to_confirm = (
             self.react_to_confirm_checkbox.isChecked()
+        )
+        settings.daily_report_enabled = (
+            self.daily_report_checkbox.isChecked()
         )
 
         emoji = self.confirm_emoji_input.text().strip()

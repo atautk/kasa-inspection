@@ -276,6 +276,49 @@ def test_compute_stats_counts_ok_and_ng_correctly(logger):
     assert stats["by_roi"]["G01"] == {"ok": 2, "ng": 1}
 
 
+def test_compute_period_stats_excludes_records_before_since(logger):
+
+    logger.log(make_result(True), "clio")
+    logger.log(make_result(False), "clio")
+
+    # ilk kaydı "eskiymiş" gibi göstermek için zaman damgasını geriye al
+    conn = logger._connect()
+    conn.execute(
+        "UPDATE inspections SET timestamp = ? WHERE id = ?",
+        ("2000-01-01T00:00:00+00:00", logger.fetch_recent()[-1]["id"])
+    )
+    conn.commit()
+    conn.close()
+
+    stats = logger.compute_period_stats("2020-01-01T00:00:00+00:00")
+
+    assert stats["total"] == 1
+    assert stats["ok_count"] == 0
+    assert stats["ng_count"] == 1
+
+
+def test_compute_period_stats_with_future_since_returns_empty(logger):
+
+    logger.log(make_result(True), "clio")
+
+    stats = logger.compute_period_stats("2999-01-01T00:00:00+00:00")
+
+    assert stats["total"] == 0
+    assert stats["by_model"] == {}
+    assert stats["by_roi"] == {}
+
+
+def test_compute_period_stats_matches_compute_stats_shape(logger):
+
+    logger.log(make_result(True), "clio")
+
+    stats = logger.compute_period_stats("2000-01-01T00:00:00+00:00")
+
+    assert set(stats.keys()) == {
+        "total", "ok_count", "ng_count", "by_model", "by_roi"
+    }
+
+
 def test_clear_removes_all_records_and_resets_state(logger):
 
     logger.log_if_changed(make_result(True), "clio")

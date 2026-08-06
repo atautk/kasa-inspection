@@ -76,6 +76,23 @@ class DebugDialog(QDialog):
 
         layout.addLayout(confirm_row)
 
+        blur_row = QHBoxLayout()
+
+        blur_row.addWidget(QLabel("Bulanıklık Eşiği (Laplacian varyansı):"))
+
+        self.blur_threshold_spinbox = QDoubleSpinBox()
+        self.blur_threshold_spinbox.setRange(0.0, 10000.0)
+        self.blur_threshold_spinbox.setDecimals(1)
+        self.blur_threshold_spinbox.setSingleStep(10.0)
+        blur_row.addWidget(self.blur_threshold_spinbox)
+
+        self.sharpness_label = QLabel("Anlık netlik: -")
+        blur_row.addWidget(self.sharpness_label)
+
+        blur_row.addStretch()
+
+        layout.addLayout(blur_row)
+
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         layout.addWidget(scroll)
@@ -114,6 +131,24 @@ class DebugDialog(QDialog):
     def get_confirm_frames(self) -> int:
 
         return self.confirm_frames_spinbox.value()
+
+    # -------------------------------------------------
+    # Bulanıklık Eşiği Ayarı
+    # -------------------------------------------------
+
+    def set_blur_threshold(self, value: float):
+
+        self.blur_threshold_spinbox.blockSignals(True)
+        self.blur_threshold_spinbox.setValue(value)
+        self.blur_threshold_spinbox.blockSignals(False)
+
+    def get_blur_threshold(self) -> float:
+
+        return self.blur_threshold_spinbox.value()
+
+    def set_current_sharpness(self, value: float):
+
+        self.sharpness_label.setText(f"Anlık netlik: {value:.1f}")
 
     # -------------------------------------------------
 
@@ -176,7 +211,12 @@ class DebugDialog(QDialog):
             height,
             rgb.strides[0],
             QImage.Format_RGB888
-        )
+        ).copy()
+
+        # .copy() ZORUNLU: kopyalanmazsa QImage rgb'nin arabelleğini
+        # sarmalar, bu fonksiyon dönünce rgb serbest kalabilir ve
+        # ilk (gecikmeli/async) paint sırasında Qt geçersiz belleğe
+        # erişip "access violation" ile çöker.
 
         self.image_label.setPixmap(QPixmap.fromImage(qimage))
         self.image_label.resize(width, height)
