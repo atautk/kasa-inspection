@@ -35,7 +35,12 @@ def controller(qapp, tmp_path):
     # band_manager'ı geçici bir köke yönlendiriyoruz.
     ctrl.band_manager = BandManager(root=tmp_path / "configuration")
 
-    return ctrl
+    yield ctrl
+
+    # Pencereyi açık bırakmak, test paketi boyunca Qt native
+    # kaynaklarının (pencere kolu/GDI) birikip ilgisiz bir testte
+    # çökmeye yol açmasına neden olabiliyordu - bkz. tests/conftest.py.
+    window.close()
 
 
 def _open_band(controller, name="Test Bandı"):

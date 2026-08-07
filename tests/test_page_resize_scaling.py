@@ -17,16 +17,36 @@ def qapp():
     return app
 
 
+@pytest.fixture
+def pages():
+    """
+    Testin oluşturduğu pencereleri toplar ve test bitince (başarılı
+    ya da başarısız fark etmez) hepsini kapatır - açık bırakılan
+    pencereler test paketi boyunca Qt native kaynaklarının birikip
+    ilgisiz bir testte çökmeye yol açmasına neden olabiliyordu
+    (bkz. tests/conftest.py).
+    """
+
+    created = []
+
+    yield created
+
+    for page in created:
+        page.close()
+
+
 def _frame():
 
     return np.zeros((480, 640, 3), dtype=np.uint8)
 
 
-def test_reference_page_preview_rescales_on_window_resize(qapp):
+def test_reference_page_preview_rescales_on_window_resize(qapp, pages):
 
     from modules.ui.configurator.reference_page import ReferencePage
 
     page = ReferencePage()
+    pages.append(page)
+
     page.resize(400, 300)
     page.show()
 
@@ -42,11 +62,13 @@ def test_reference_page_preview_rescales_on_window_resize(qapp):
     assert large_width > small_width
 
 
-def test_reference_page_clear_preview_stops_rescaling(qapp):
+def test_reference_page_clear_preview_stops_rescaling(qapp, pages):
 
     from modules.ui.configurator.reference_page import ReferencePage
 
     page = ReferencePage()
+    pages.append(page)
+
     page.show()
 
     page.set_preview(_frame())
@@ -60,11 +82,13 @@ def test_reference_page_clear_preview_stops_rescaling(qapp):
     assert page.preview_label.pixmap().isNull()
 
 
-def test_inspection_page_image_rescales_on_window_resize(qapp):
+def test_inspection_page_image_rescales_on_window_resize(qapp, pages):
 
     from modules.ui.inspection.inspection_page import InspectionPage
 
     page = InspectionPage()
+    pages.append(page)
+
     page.resize(400, 300)
     page.show()
 
@@ -80,11 +104,13 @@ def test_inspection_page_image_rescales_on_window_resize(qapp):
     assert large_width > small_width
 
 
-def test_inspection_page_clear_image_stops_rescaling(qapp):
+def test_inspection_page_clear_image_stops_rescaling(qapp, pages):
 
     from modules.ui.inspection.inspection_page import InspectionPage
 
     page = InspectionPage()
+    pages.append(page)
+
     page.show()
 
     page.set_image(_frame())

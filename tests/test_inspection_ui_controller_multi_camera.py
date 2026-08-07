@@ -31,7 +31,13 @@ def controller(qapp, tmp_path):
 
     window = InspectionWindow()
 
-    return InspectionUIController(window, root=tmp_path, operator_name="test")
+    ctrl = InspectionUIController(window, root=tmp_path, operator_name="test")
+
+    yield ctrl
+
+    # bkz. tests/conftest.py - açık bırakılan pencereler test paketi
+    # boyunca Qt native kaynaklarının birikmesine yol açabiliyordu.
+    window.close()
 
 
 def _channel(tmp_path, name="Yan"):

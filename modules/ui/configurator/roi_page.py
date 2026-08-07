@@ -386,7 +386,12 @@ class ROIPage(QWidget):
             height,
             rgb.strides[0],
             QImage.Format_RGB888
-        )
+        ).copy()
+
+        # .copy() ZORUNLU: kopyalanmazsa QImage rgb'nin arabelleğini
+        # sarmalar, bu fonksiyon dönünce rgb serbest kalabilir ve
+        # ilk (gecikmeli/async) paint sırasında Qt geçersiz belleğe
+        # erişip "access violation" ile çöker.
 
         pixmap = QPixmap.fromImage(qimage)
 

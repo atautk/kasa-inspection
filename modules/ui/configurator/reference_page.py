@@ -148,7 +148,14 @@ class ReferencePage(QWidget):
             height,
             rgb.strides[0],
             QImage.Format_RGB888
-        )
+        ).copy()
+
+        # .copy() ZORUNLU: QImage varsayılan olarak rgb'nin numpy
+        # arabelleğini kopyalamadan doğrudan sarmalar. Bu fonksiyon
+        # dönünce rgb serbest kalabileceğinden, resizeEvent bu kareyi
+        # tekrar çizmeye çalıştığında Qt artık geçersiz belleğe erişip
+        # "access violation" ile çöküyordu (gerçek bir crash ile
+        # doğrulandı - bkz. tests/test_page_resize_scaling.py).
 
         pixmap = QPixmap.fromImage(image).scaled(
             self.preview_label.width(),
