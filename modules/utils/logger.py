@@ -1,8 +1,9 @@
 import logging
 from logging.handlers import RotatingFileHandler
-from pathlib import Path
 
-LOG_DIR = Path(__file__).resolve().parents[2] / "logs"
+from modules.utils.paths import get_app_root
+
+LOG_DIR = get_app_root() / "logs"
 LOG_FILE = LOG_DIR / "app.log"
 
 # Fabrikada makine sürekli açık kalabildiği için app.log sınırsız

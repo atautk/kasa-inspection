@@ -1,5 +1,4 @@
 import json
-from pathlib import Path
 
 from PySide6.QtWidgets import (
     QInputDialog,
@@ -53,9 +52,9 @@ from modules.configuration.telegram_recipients_manager import (
 )
 from modules.utils.logger import LOG_FILE
 from modules.utils.test_runner import TestRunner
+from modules.utils.paths import get_app_root
 
-# modules/ui/configurator/configurator_controller.py -> proje kökü
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = get_app_root()
 
 from modules.core.camera import Camera
 from modules.core.aruco_detector import ArucoDetector

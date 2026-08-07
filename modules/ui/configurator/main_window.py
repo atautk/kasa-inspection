@@ -1,3 +1,5 @@
+import sys
+
 from PySide6.QtWidgets import (
     QMainWindow,
     QTabWidget
@@ -37,7 +39,14 @@ class MainWindow(QMainWindow):
         self.tabs.addTab(self.reference_page, "Reference")
         self.tabs.addTab(self.roi_page, "ROI")
         self.tabs.addTab(self.model_page, "Models")
-        self.tabs.addTab(self.test_runner_page, "Testler")
+
+        # Paketlenmiş .exe'de pytest/tests/ klasörü bulunmadığından bu
+        # sekme çalışmaz - sadece geliştirme ortamında (python ile
+        # çalıştırılınca) gösterilir. test_runner_page yine de
+        # oluşturulur (ConfiguratorController sinyal bağlarken ona
+        # erişiyor), sadece sekme listesine eklenmez.
+        if not getattr(sys, "frozen", False):
+            self.tabs.addTab(self.test_runner_page, "Testler")
 
         self.tabs.setTabEnabled(1, False)
         self.tabs.setTabEnabled(2, False)

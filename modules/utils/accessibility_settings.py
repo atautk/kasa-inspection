@@ -1,8 +1,8 @@
-from pathlib import Path
-
 from PySide6.QtCore import QSettings
 
-ROOT = Path(__file__).resolve().parents[2]
+from modules.utils.paths import get_app_root
+
+ROOT = get_app_root()
 SETTINGS_PATH = ROOT / "window_settings.ini"
 
 SCALE_OPTIONS = {

@@ -61,3 +61,8 @@ configuration/band_01/cameras/
 # ek kamera kanalı) değiştiriliyor - takipten çıkarıldı, git rm
 # --cached
 configuration/band_01/band.json
+
+# PyInstaller derleme çıktıları (build_exe.py ile üretilir, git'e
+# girmemeli - her makinede yeniden derlenir)
+/build/
+/dist/

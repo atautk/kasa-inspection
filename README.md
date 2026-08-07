@@ -124,6 +124,26 @@ bildirimleri, çoklu kamera kanalları) için toplam 190'ın üzerinde birim
 testi vardır. `main` dalına her push/PR'da GitHub Actions ile otomatik
 çalışır (`.github/workflows/tests.yml`).
 
+## .exe Olarak Paketleme
+
+Band bilgisayarlarına Python kurmadan çalıştırılabilir bir sürüm üretmek için
+PyInstaller kullanılır:
+
+```powershell
+.venv\Scripts\Activate.ps1
+pip install -r requirements-build.txt
+python build_exe.py
+```
+
+Çıktı `dist/KasaInspection/` altında üç kardeş klasör olarak oluşur
+(`Launcher/`, `Configurator/`, `Inspection/`) - band/model yapılandırması,
+loglar ve pencere ayarları bu üç klasörün de bulunduğu ortak üst dizinde
+(`dist/KasaInspection/configuration/`, `logs/`, `window_settings.ini`)
+paylaşılır. Başka bir bilgisayara taşırken **`KasaInspection` klasörünün
+tamamı** (üç alt klasörle birlikte) kopyalanmalı - tek bir `.exe` dosyası
+taşımak yeterli değildir. Paketlenmiş sürümde uygulama-içi "Testler" sekmesi
+görünmez (pytest ayrı bir bağımlılık, exe'ye dahil edilmez).
+
 ## Proje Yapısı
 
 ```

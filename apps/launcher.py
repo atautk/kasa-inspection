@@ -3,8 +3,13 @@ import subprocess
 from pathlib import Path
 
 APPS_DIR = Path(__file__).resolve().parent
-ROOT = APPS_DIR.parent
-sys.path.insert(0, str(ROOT))
+
+# python ile doğrudan çalıştırıldığında "modules" paketinin
+# bulunabilmesi için proje kökü sys.path'e eklenir - PyInstaller ile
+# paketlenmiş halde bu satır etkisizdir (import'lar zaten bundle
+# içinden çözülür), o yüzden burada __file__ tabanlı yol kullanmak
+# güvenlidir.
+sys.path.insert(0, str(APPS_DIR.parent))
 
 from PySide6.QtWidgets import (
     QApplication,
@@ -14,9 +19,11 @@ from PySide6.QtWidgets import (
     QPushButton
 )
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 
 from modules.ui.window_utils import restore_or_center, save_geometry
 from modules.utils import accessibility_settings as a11y
+from modules.utils.paths import get_resource_path
 
 SETTINGS_KEY = "launcher"
 
@@ -51,15 +58,35 @@ class LauncherWindow(QWidget):
 
     def launch_configurator(self):
 
-        self._launch("configurator.py")
+        self._launch("configurator.py", "Configurator")
 
     def launch_inspection(self):
 
-        self._launch("inspection.py")
+        self._launch("inspection.py", "Inspection")
 
     # -------------------------------------------------
 
-    def _launch(self, script_name: str):
+    def _launch(self, script_name: str, app_name: str):
+        """
+        Geliştirme ortamında (python ile) ilgili script'i aynı
+        yorumlayıcıyla ayrı bir process olarak açar. PyInstaller ile
+        paketlenmiş halde ise sys.executable Launcher.exe'nin
+        kendisidir ve script_name diskte bir .py dosyası olarak
+        bulunmaz - onun yerine build_exe.py'nin ürettiği kardeş
+        <UygulamaAdı>/<UygulamaAdı>.exe açılır (bkz.
+        modules/utils/paths.get_app_root - aynı paylaşılan üst
+        klasörün altındadırlar).
+        """
+
+        if getattr(sys, "frozen", False):
+
+            exe_path = (
+                Path(sys.executable).resolve().parent.parent
+                / app_name / f"{app_name}.exe"
+            )
+
+            subprocess.Popen([str(exe_path)])
+            return
 
         subprocess.Popen(
             [sys.executable, str(APPS_DIR / script_name)]
@@ -79,6 +106,11 @@ def main():
     app = QApplication(sys.argv)
 
     a11y.apply_ui_scale(app)
+
+    icon_path = get_resource_path("assets/icon.png")
+
+    if icon_path.exists():
+        app.setWindowIcon(QIcon(str(icon_path)))
 
     window = LauncherWindow()
     window.show()
