@@ -52,3 +52,12 @@ training_data/
 # konfigürasyonu değil, git'e girmesin)
 configuration/band_02/
 configuration/band_03/
+
+# band_01'e test amaçlı eklenen ek kamera kanalı verisi (deneme,
+# gerçek üretim konfigürasyonu değil)
+configuration/band_01/cameras/
+
+# band_01/band.json makineye özel test ayarlarıyla (Arduino portu,
+# ek kamera kanalı) değiştiriliyor - takipten çıkarıldı, git rm
+# --cached
+configuration/band_01/band.json
