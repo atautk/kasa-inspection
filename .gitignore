@@ -47,3 +47,8 @@ training_data/
 
 # Kamera kalibrasyon çıktıları (istersen bunları sonradan ekleyebilirsin)
 # calibration/*.npy
+
+# Deneme amaçlı oluşturulan test bandları (gerçek üretim
+# konfigürasyonu değil, git'e girmesin)
+configuration/band_02/
+configuration/band_03/
