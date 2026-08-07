@@ -39,7 +39,8 @@ def isolated_settings(tmp_path, monkeypatch):
         return QSettings(str(settings_path), QSettings.IniFormat)
 
     monkeypatch.setattr(
-        "modules.ui.inspection.inspection_ui_controller.get_app_settings",
+        "modules.ui.inspection.controller_mixins.session_recovery_mixin."
+        "get_app_settings",
         fake_get_app_settings
     )
 

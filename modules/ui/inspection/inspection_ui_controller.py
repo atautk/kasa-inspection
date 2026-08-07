@@ -1,7 +1,6 @@
 import time
-import threading
 import winsound
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
@@ -14,16 +13,6 @@ from modules.core.localization import LocalizationEngine
 from modules.core.reference_frame import ReferenceFrame
 from modules.core.inspection_engine import InspectionEngine
 from modules.core.decision_engine import DecisionEngine
-from modules.core.arduino_controller import ArduinoController
-from modules.core.telegram_notifier import TelegramNotifier
-from modules.core.telegram_reaction_poller import TelegramReactionPoller
-from modules.core.telegram_notification_queue import (
-    TelegramNotificationQueue,
-    QueuedNotification
-)
-from modules.configuration.periodic_report_exporter import (
-    PeriodicReportExporter
-)
 from modules.core.blur_detector import BlurDetector
 
 from modules.configuration.band_manager import BandManager
@@ -47,20 +36,73 @@ from modules.configuration.telegram_settings_manager import (
 from modules.configuration.telegram_recipients_manager import (
     TelegramRecipientsManager
 )
+from modules.core.telegram_notification_queue import TelegramNotificationQueue
 
 from modules.ui.roi_manager import ROIManager
 from modules.ui.inspection.debug_dialog import DebugDialog
 from modules.ui.inspection.log_viewer_dialog import LogViewerDialog
-from modules.ui.window_utils import get_app_settings
+
+from modules.ui.inspection.controller_mixins.session_recovery_mixin import (
+    SessionRecoveryMixin
+)
+from modules.ui.inspection.controller_mixins.telegram_mixin import (
+    TelegramMixin
+)
+from modules.ui.inspection.controller_mixins.periodic_report_mixin import (
+    PeriodicReportMixin
+)
+from modules.ui.inspection.controller_mixins.shift_tracking_mixin import (
+    ShiftTrackingMixin
+)
+from modules.ui.inspection.controller_mixins.blur_detection_mixin import (
+    BlurDetectionMixin
+)
+from modules.ui.inspection.controller_mixins.reference_age_mixin import (
+    ReferenceAgeMixin
+)
+from modules.ui.inspection.controller_mixins.auto_backup_mixin import (
+    AutoBackupMixin
+)
+from modules.ui.inspection.controller_mixins.marker_detection_mixin import (
+    MarkerDetectionMixin
+)
+from modules.ui.inspection.controller_mixins.arduino_mixin import (
+    ArduinoMixin
+)
+from modules.ui.inspection.controller_mixins.disk_space_mixin import (
+    DiskSpaceMixin
+)
 
 from modules.controllers.inspection_controller import InspectionController
 from modules.utils.logger import get_logger
-from modules.utils.disk_monitor import get_free_space_gb
 
 app_logger = get_logger()
 
 
-class InspectionUIController:
+class InspectionUIController(
+    SessionRecoveryMixin,
+    TelegramMixin,
+    PeriodicReportMixin,
+    ShiftTrackingMixin,
+    BlurDetectionMixin,
+    ReferenceAgeMixin,
+    AutoBackupMixin,
+    MarkerDetectionMixin,
+    ArduinoMixin,
+    DiskSpaceMixin,
+):
+    """
+    İnceleme (Inspection) ekranının ana orkestratörü: kamera/tick
+    döngüsü, band/model seçimi, çoklu kamera kanalları ve arayüz
+    kablolaması burada; NG bildirimi, vardiya takibi, bulanıklık,
+    referans yaşı, otomatik yedekleme, ArUco marker tespiti, oturum
+    toparlanma, Arduino ve disk alanı gibi kendi başına özellik
+    grupları controller_mixins/ altındaki ayrı mixin sınıflarında.
+
+    Her mixin, bu sınıfla aynı örneği (self) paylaştığından, burada
+    tanımlı _throttled/_cooldown_ready gibi ortak yardımcılara ve
+    __init__'te kurulan tüm manager/state alanlarına doğrudan erişir.
+    """
 
     CAMERA_WIDTH = 1280
     CAMERA_HEIGHT = 720
@@ -68,62 +110,6 @@ class InspectionUIController:
 
     CAMERA_FAILURE_THRESHOLD = 30
     RECONNECT_INTERVAL_SECONDS = 3.0
-
-    ARDUINO_RECONNECT_INTERVAL_SECONDS = 5.0
-
-    # Kuyruktaki gönderilemeyen Telegram bildirimlerini tekrar
-    # deneme sıklığı. Çok sık denemek (ör. her karede) bağlantı
-    # koptuğunda Telegram'a gereksiz yük bindirir.
-    TELEGRAM_QUEUE_FLUSH_INTERVAL_SECONDS = 60.0
-
-    # Periyodik özet raporunun ne sıklıkla gönderileceğinin ("her 24
-    # saatte bir") ve bunun ne sıklıkla kontrol edileceğinin
-    # (5 dakikada bir - saatlik hassasiyet yeterli, her karede
-    # kontrol etmeye gerek yok) ayarları.
-    REPORT_PERIOD_HOURS = 24
-    REPORT_CHECK_INTERVAL_SECONDS = 300.0
-
-    # Vardiya ilerlemesinin ne sıklıkla kontrol edileceği, ne kadar
-    # geride kalmanın "normal" sayılacağı (kasa değişim süresi vb.
-    # doğal dalgalanmalar için pay) ve aynı vardiyada bildirimler
-    # arasında en az ne kadar süre olması gerektiği.
-    SHIFT_CHECK_INTERVAL_SECONDS = 60.0
-    SHIFT_PACE_TOLERANCE = 0.2
-    SHIFT_WARNING_COOLDOWN_SECONDS = 3600.0
-
-    # Bulanıklık kontrolünün sıklığı, kaç ardışık kontrolün "sürekli
-    # bulanık" saymak için gerektiği (tek kötü kare/geçici titreme
-    # için uyarmasın diye) ve aynı bağlantı için bildirimler arası
-    # minimum süre.
-    BLUR_CHECK_INTERVAL_SECONDS = 2.0
-    BLUR_STREAK_THRESHOLD = 3
-    BLUR_WARNING_COOLDOWN_SECONDS = 300.0
-
-    # Referans yaşı gün hassasiyetinde değiştiğinden sık kontrole
-    # gerek yok; hatırlatma da günde bir defadan fazla tekrar etmesin.
-    REFERENCE_AGE_CHECK_INTERVAL_SECONDS = 3600.0
-    REFERENCE_AGE_WARNING_COOLDOWN_SECONDS = 86400.0
-
-    # Otomatik yedeklemenin gerçek sıklığı band.auto_backup_interval_hours
-    # ile belirlenir - bu sadece o kontrolün ne sıklıkla yapılacağı
-    # (saatlik kontrol, dakikalık hassasiyete gerek yok).
-    BACKUP_CHECK_INTERVAL_SECONDS = 3600.0
-
-    # Son kullanılan band/model/çalışma durumunu makine ayarlarında
-    # (window_settings.ini) saklamak için kullanılan anahtar öneki -
-    # bkz. _save_session_band/_save_session_model/_save_session_running,
-    # otomatik toparlanma (crash/elektrik kesintisi sonrası).
-    SESSION_SETTINGS_KEY = "inspection_session"
-
-    # ArUco marker ile otomatik model tespiti: yanlış okumadan (tek
-    # kare titremesi) dolayı model aniden değişmesin diye aynı
-    # marker ID'sinin bu kadar ardışık karede görülmesi gerekir.
-    # Tanınmayan kasa bildirimleri de en fazla bu sıklıkta tekrarlar.
-    MARKER_SWITCH_CONFIRM_FRAMES = 5
-    UNKNOWN_KASA_NOTIFY_COOLDOWN_SECONDS = 300.0
-
-    DISK_WARNING_THRESHOLD_GB = 5.0
-    DISK_CHECK_INTERVAL_SECONDS = 60.0
 
     def __init__(self, window, root=None, operator_name=None):
 
@@ -152,7 +138,7 @@ class InspectionUIController:
         self._telegram_report_thread = None
         self._last_report_check_attempt = 0.0
 
-        # Vardiya bazlı üretim takibi (bkz. _maybe_check_shift_progress).
+        # Vardiya bazlı üretim takibi (bkz. ShiftTrackingMixin).
         # shift_start_time, _start() ilk çağrıldığında (ya da band
         # değiştiğinde) ayarlanır; band.shift_target_count == 0 ise
         # tüm takip/uyarı devre dışı kalır.
@@ -160,16 +146,16 @@ class InspectionUIController:
         self._last_shift_check_attempt = 0.0
         self._last_shift_warning_at = None
 
-        # Kamera netliği (bulanıklık) takibi - bkz.
-        # _maybe_check_blur. Yanlış NG'lerin bir nedeni kamera odağı/
-        # lens kirliliği olabileceğinden erkenden uyarır.
+        # Kamera netliği (bulanıklık) takibi - bkz. BlurDetectionMixin.
+        # Yanlış NG'lerin bir nedeni kamera odağı/lens kirliliği
+        # olabileceğinden erkenden uyarır.
         self.blur_detector = BlurDetector()
         self.blur_streak = 0
         self._last_blur_check_attempt = 0.0
         self._last_blur_warning_at = None
 
         # Referans fotoğrafı yaşlanma hatırlatıcısı - bkz.
-        # _maybe_check_reference_age.
+        # ReferenceAgeMixin.
         self._last_reference_age_check_attempt = 0.0
         self._last_reference_age_warning_at = None
 
@@ -199,7 +185,7 @@ class InspectionUIController:
         self.unknown_kasa_capture_manager = UnknownKasaCaptureManager()
 
         # ArUco marker ile otomatik model tespiti - bkz.
-        # _rebuild_marker_id_map / _handle_marker_model_detection.
+        # MarkerDetectionMixin.
         self._marker_id_to_model = {}
         self._marker_detection_enabled = False
         self._pending_marker_candidate = None
@@ -243,6 +229,44 @@ class InspectionUIController:
         self.window.close_callback = self._on_window_closing
 
     # -------------------------------------------------
+    # Periyodik Kontrol Yardımcıları (throttle / cooldown)
+    # -------------------------------------------------
+    #
+    # Tick döngüsündeki neredeyse tüm "_maybe_*" kontrolleri (Telegram
+    # kuyruğu, periyodik rapor, vardiya, bulanıklık, referans yaşı,
+    # otomatik yedekleme, Arduino/kamera yeniden bağlanma, disk alanı)
+    # aynı iki şekle sahiptir: (1) en fazla N saniyede bir çalışacak
+    # bir kontrol, (2) zaten aktif bir uyarı durumunda bildirimi en
+    # fazla N saniyede bir tekrarlayan bir "soğuma" süresi. Bu iki
+    # yardımcı, o boilerplate'i tek satıra indirir - attribute adının
+    # string olarak verilmesi, testlerin ilgili _last_* alanını
+    # doğrudan (ör. controller._last_blur_check_attempt = 0.0) set
+    # ederek throttle'ı manuel bypass edebilmesini korur.
+
+    def _throttled(self, attr_name: str, interval_seconds: float) -> bool:
+
+        now = time.perf_counter()
+
+        if now - getattr(self, attr_name) < interval_seconds:
+            return False
+
+        setattr(self, attr_name, now)
+        return True
+
+    def _cooldown_ready(self, attr_name: str, cooldown_seconds: float) -> bool:
+
+        last = getattr(self, attr_name)
+
+        if (
+            last is not None
+            and time.perf_counter() - last < cooldown_seconds
+        ):
+            return False
+
+        setattr(self, attr_name, time.perf_counter())
+        return True
+
+    # -------------------------------------------------
     # Pencere Kapanıyor
     # -------------------------------------------------
 
@@ -284,89 +308,17 @@ class InspectionUIController:
         )
 
     # -------------------------------------------------
-    # Oturum Durumu (Otomatik Toparlanma)
+    # Band / Model Yükleme
     # -------------------------------------------------
     #
     # Bilgisayar elektrik kesintisi/çökme sonrası yeniden açıldığında,
     # PIN girişi hâlâ gereklidir (güvenlik/hesap verebilirlik için) -
     # ama biri giriş yapar yapmaz, son kullanılan band/model otomatik
     # seçilir ve inceleme çalışıyor idiyse otomatik Başlat'a basılmış
-    # gibi devam eder. "Çalışıyor idiyse" hem gerçek bir çökmeyi hem
-    # de operatörün Durdur'a basmadan pencereyi kapatmasını aynı
-    # şekilde ele alır - ikisini ayırt etmek güvenilir değildir.
-
-    def _save_session_band(self):
-
-        settings = get_app_settings()
-
-        settings.setValue(
-            f"{self.SESSION_SETTINGS_KEY}/last_band_id",
-            self.current_band.id if self.current_band is not None else None
-        )
-
-    def _save_session_model(self):
-
-        settings = get_app_settings()
-
-        settings.setValue(
-            f"{self.SESSION_SETTINGS_KEY}/last_model_id",
-            self.current_model.id
-            if self.current_model is not None else None
-        )
-
-    def _save_session_running(self, running: bool):
-
-        settings = get_app_settings()
-
-        settings.setValue(
-            f"{self.SESSION_SETTINGS_KEY}/was_running", running
-        )
-
-    def _load_session_state(self) -> dict:
-
-        settings = get_app_settings()
-
-        return {
-            "last_band_id": settings.value(
-                f"{self.SESSION_SETTINGS_KEY}/last_band_id", None
-            ),
-            "last_model_id": settings.value(
-                f"{self.SESSION_SETTINGS_KEY}/last_model_id", None
-            ),
-            "was_running": settings.value(
-                f"{self.SESSION_SETTINGS_KEY}/was_running",
-                False,
-                type=bool
-            )
-        }
-
-    def _index_of_band_id(self, band_id):
-
-        if band_id is None:
-            return None
-
-        for index, band in enumerate(self.bands):
-
-            if band.id == band_id:
-                return index
-
-        return None
-
-    def _index_of_model_id(self, model_id):
-
-        if model_id is None:
-            return None
-
-        for index, model in enumerate(self.models):
-
-            if model.id == model_id:
-                return index
-
-        return None
-
-    # -------------------------------------------------
-    # Band / Model Yükleme
-    # -------------------------------------------------
+    # gibi devam eder (bkz. SessionRecoveryMixin). "Çalışıyor idiyse"
+    # hem gerçek bir çökmeyi hem de operatörün Durdur'a basmadan
+    # pencereyi kapatmasını aynı şekilde ele alır - ikisini ayırt
+    # etmek güvenilir değildir.
 
     def _load_bands(self):
 
@@ -469,26 +421,6 @@ class InspectionUIController:
             self.current_model = None
             self.recipe_manager = ModelRecipeAdapter(None)
             self._build_inspection_controller()
-
-    def _rebuild_marker_id_map(self):
-        """
-        Bandın modellerinden marker_id -> Model haritasını kurar.
-        Hiçbir modelde marker_id ayarlanmamışsa (eski/tek modelli
-        bandlar) tespit tamamen devre dışı kalır - sıfır davranış
-        değişikliği.
-        """
-
-        self._marker_id_to_model = {
-            model.marker_id: model for model in self.models
-            if model.marker_id is not None
-        }
-
-        self._marker_detection_enabled = bool(self._marker_id_to_model)
-        self._pending_marker_candidate = None
-        self._pending_marker_streak = 0
-        self._last_unknown_marker_id_captured = None
-
-        self.page.hide_unknown_kasa_warning()
 
     def _load_extra_channels(self):
         """
@@ -737,1040 +669,6 @@ class InspectionUIController:
 
         self.timer.start()
 
-    # -------------------------------------------------
-    # Telegram Bildirimleri
-    # -------------------------------------------------
-
-    def _telegram_chat_ids(self, primary_chat_id: str) -> list:
-        """
-        Bildirimin gideceği tüm chat id'ler: birincil (ayarlardaki
-        tek) chat + telefon numarasıyla kaydolmuş, aktif işaretli
-        tüm alıcılar. Tekrarlar elenir.
-        """
-
-        chat_ids = []
-
-        if primary_chat_id.strip():
-            chat_ids.append(primary_chat_id.strip())
-
-        for chat_id in self.telegram_recipients_manager.active_chat_ids():
-
-            if chat_id not in chat_ids:
-                chat_ids.append(chat_id)
-
-        return chat_ids
-
-    def _notify_telegram_ng(self, results: dict, image_path, record_id):
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.notify_on_ng or not settings.bot_token.strip():
-            return
-
-        chat_ids = self._telegram_chat_ids(settings.chat_id)
-
-        if not chat_ids:
-            return
-
-        ng_names = [
-            name for name, data in results.items()
-            if not data.get("ok", True)
-        ]
-
-        band_name = (
-            self.current_band.name
-            if self.current_band is not None
-            else "?"
-        )
-
-        caption = (
-            f"⚠ NG - {band_name}\n"
-            f"Hatalı gözler: {', '.join(ng_names) if ng_names else '-'}"
-        )
-
-        if settings.react_to_confirm:
-
-            caption += (
-                f"\n\nYanlış tespitse bu mesaja {settings.confirm_emoji} "
-                "ile tepki verin, otomatik olarak OK'e çevrilir."
-            )
-
-        # inspection_logger band değişse bile DOĞRU kayda yazsın diye
-        # şu anki referansı closure içine sabitliyoruz (arka plan
-        # thread'i mesaj gönderimi bitince çalışır, o ana kadar band
-        # değişmiş/durdurulmuş olabilir).
-        logger_at_send_time = self.inspection_logger
-
-        def on_primary_success(message_id):
-
-            # Emoji ile onaylama sadece BİRİNCİL sohbetteki mesaj
-            # için destekleniyor (her alıcının kendi mesaj id'sini
-            # ayrı ayrı izlemek şimdilik kapsam dışı).
-            if record_id is not None and logger_at_send_time is not None:
-                logger_at_send_time.set_telegram_message_id(
-                    record_id, message_id
-                )
-
-        for index, chat_id in enumerate(chat_ids):
-
-            notifier = TelegramNotifier(settings.bot_token, chat_id)
-
-            is_primary = index == 0
-
-            callback = self._telegram_retry_on_failure_callback(
-                kind="photo" if image_path else "message",
-                bot_token=settings.bot_token,
-                chat_id=chat_id,
-                text=caption,
-                image_path=str(image_path) if image_path else "",
-                record_id=record_id,
-                is_primary=is_primary,
-                on_success=on_primary_success if is_primary else None
-            )
-
-            if image_path:
-                notifier.send_photo_async(
-                    image_path, caption=caption, on_sent=callback
-                )
-            else:
-                notifier.send_message_async(caption, on_sent=callback)
-
-    def _telegram_retry_on_failure_callback(
-        self,
-        kind,
-        bot_token,
-        chat_id,
-        text,
-        image_path="",
-        record_id=None,
-        is_primary=False,
-        on_success=None
-    ):
-        """
-        Gönderim başarılıysa (varsa) on_success(message_id) çağırır.
-        Başarısızsa - ağ/Telegram erişilemiyorsa - bildirimi kuyruğa
-        ekler ki bağlantı geri geldiğinde tekrar denensin (bkz.
-        _maybe_flush_telegram_queue).
-        """
-
-        def on_sent(message_id):
-
-            if message_id is not None:
-
-                if on_success is not None:
-                    on_success(message_id)
-
-                return
-
-            self.telegram_queue.enqueue(QueuedNotification(
-                kind=kind,
-                bot_token=bot_token,
-                chat_id=chat_id,
-                text=text,
-                image_path=image_path,
-                record_id=record_id,
-                is_primary=is_primary
-            ))
-
-        return on_sent
-
-    def _notify_telegram_disconnect(self, device_name: str):
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.notify_on_disconnect or not settings.bot_token.strip():
-            return
-
-        chat_ids = self._telegram_chat_ids(settings.chat_id)
-
-        if not chat_ids:
-            return
-
-        band_name = (
-            self.current_band.name
-            if self.current_band is not None
-            else "?"
-        )
-
-        text = f"🔌 {device_name} bağlantısı koptu - {band_name}"
-
-        for chat_id in chat_ids:
-
-            callback = self._telegram_retry_on_failure_callback(
-                kind="message",
-                bot_token=settings.bot_token,
-                chat_id=chat_id,
-                text=text
-            )
-
-            TelegramNotifier(
-                settings.bot_token, chat_id
-            ).send_message_async(text, on_sent=callback)
-
-    # -------------------------------------------------
-    # Telegram Bildirim Kuyruğunu Boşaltma
-    # -------------------------------------------------
-
-    def _maybe_flush_telegram_queue(self):
-        """
-        Ağ/Telegram erişilemediği için kuyruğa düşmüş bildirimleri
-        tekrar göndermeyi dener. Her karede değil, en fazla
-        TELEGRAM_QUEUE_FLUSH_INTERVAL_SECONDS'te bir - aksi halde
-        bağlantı koptuğunda Telegram'a saniyede onlarca istek atılır.
-        Ağ isteği içerdiğinden her zaman arka plan thread'inde çalışır.
-        """
-
-        now = time.perf_counter()
-
-        if (
-            now - self._last_telegram_flush_attempt
-            < self.TELEGRAM_QUEUE_FLUSH_INTERVAL_SECONDS
-        ):
-            return
-
-        if (
-            self._telegram_flush_thread is not None
-            and self._telegram_flush_thread.is_alive()
-        ):
-            return
-
-        self._last_telegram_flush_attempt = now
-
-        logger_at_flush_time = self.inspection_logger
-
-        def on_message_sent(record_id, message_id):
-
-            if record_id is not None and logger_at_flush_time is not None:
-                logger_at_flush_time.set_telegram_message_id(
-                    record_id, message_id
-                )
-
-        def _run():
-
-            sent_count = self.telegram_queue.flush(
-                notifier_factory=TelegramNotifier,
-                on_message_sent=on_message_sent
-            )
-
-            if sent_count:
-
-                app_logger.info(
-                    "Kuyruktaki %d Telegram bildirimi gönderildi.",
-                    sent_count
-                )
-
-        self._telegram_flush_thread = threading.Thread(
-            target=_run, daemon=True
-        )
-        self._telegram_flush_thread.start()
-
-    # -------------------------------------------------
-    # Periyodik Özet Rapor
-    # -------------------------------------------------
-
-    def _resolve_report_period_start(self, settings, now_utc):
-        """
-        Son rapor ne zaman gönderildiyse ondan bu yana geçen süreye
-        bakar. REPORT_PERIOD_HOURS dolmadıysa None döner (henüz
-        rapor zamanı değil). Hiç gönderilmemişse ya da tarih
-        okunamıyorsa, son REPORT_PERIOD_HOURS'u kapsayan bir rapor
-        için başlangıç noktası döner.
-        """
-
-        if not settings.last_daily_report_sent_at:
-            return now_utc - timedelta(hours=self.REPORT_PERIOD_HOURS)
-
-        try:
-            last_sent = datetime.fromisoformat(
-                settings.last_daily_report_sent_at
-            )
-        except Exception:
-            return now_utc - timedelta(hours=self.REPORT_PERIOD_HOURS)
-
-        elapsed_hours = (now_utc - last_sent).total_seconds() / 3600
-
-        if elapsed_hours < self.REPORT_PERIOD_HOURS:
-            return None
-
-        return last_sent
-
-    def _maybe_send_periodic_report(self):
-        """
-        Ayarlarda açıksa, her REPORT_PERIOD_HOURS saatte bir bandın
-        toplam/OK/NG ve model/ROI bazlı özetini bir Excel dosyası
-        olarak Telegram'a gönderir. Gönderim başarısız olursa (ağ
-        kopuksa) diğer bildirimlerle aynı kuyruğa (telegram_queue)
-        eklenir - kaybolmaz, bağlantı gelince tekrar denenir.
-        """
-
-        now = time.perf_counter()
-
-        if (
-            now - self._last_report_check_attempt
-            < self.REPORT_CHECK_INTERVAL_SECONDS
-        ):
-            return
-
-        self._last_report_check_attempt = now
-
-        if self.inspection_logger is None or self.current_band is None:
-            return
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.daily_report_enabled or not settings.is_configured():
-            return
-
-        now_utc = datetime.now(timezone.utc)
-
-        since = self._resolve_report_period_start(settings, now_utc)
-
-        if since is None:
-            return
-
-        if (
-            self._telegram_report_thread is not None
-            and self._telegram_report_thread.is_alive()
-        ):
-            return
-
-        band = self.current_band
-        logger_at_send_time = self.inspection_logger
-        chat_ids = self._telegram_chat_ids(settings.chat_id)
-
-        def _run():
-
-            stats = logger_at_send_time.compute_period_stats(
-                since.isoformat()
-            )
-
-            reports_folder = band.root / "telegram_reports"
-            reports_folder.mkdir(parents=True, exist_ok=True)
-
-            report_path = reports_folder / (
-                f"rapor_{now_utc.strftime('%Y%m%d_%H%M%S')}.xlsx"
-            )
-
-            PeriodicReportExporter().export(
-                stats, report_path, band.name, "Son 24 Saat Özeti"
-            )
-
-            caption = (
-                f"📊 Günlük Özet - {band.name}\n"
-                f"Toplam: {stats['total']} | OK: {stats['ok_count']} | "
-                f"NG: {stats['ng_count']}"
-            )
-
-            for chat_id in chat_ids:
-
-                notifier = TelegramNotifier(settings.bot_token, chat_id)
-
-                message_id = notifier.send_document(
-                    str(report_path), caption=caption
-                )
-
-                if message_id is None:
-
-                    self.telegram_queue.enqueue(QueuedNotification(
-                        kind="document",
-                        bot_token=settings.bot_token,
-                        chat_id=chat_id,
-                        text=caption,
-                        image_path=str(report_path)
-                    ))
-
-            updated_settings = self.telegram_settings_manager.load()
-            updated_settings.last_daily_report_sent_at = (
-                now_utc.isoformat()
-            )
-            self.telegram_settings_manager.save(updated_settings)
-
-        self._telegram_report_thread = threading.Thread(
-            target=_run, daemon=True
-        )
-        self._telegram_report_thread.start()
-
-    # -------------------------------------------------
-    # Vardiya Bazlı Üretim Takibi
-    # -------------------------------------------------
-
-    def _maybe_check_shift_progress(self):
-        """
-        Bandın vardiya hedefi tanımlıysa (shift_target_count > 0),
-        vardiya başlangıcından bu yana kaç kasa incelendiğini
-        (InspectionLogger'a düşen kayıt sayısı - compute_period_stats
-        ile aynı sorgu, periyodik rapor özelliğiyle paylaşılıyor)
-        hesaplar, arayüzde gösterir ve beklenen tempoya göre
-        ciddi şekilde geride kalınmışsa Telegram'dan uyarır.
-        """
-
-        now = time.perf_counter()
-
-        if (
-            now - self._last_shift_check_attempt
-            < self.SHIFT_CHECK_INTERVAL_SECONDS
-        ):
-            return
-
-        self._last_shift_check_attempt = now
-
-        if self.current_band is None or self.inspection_logger is None:
-            return
-
-        if self.shift_start_time is None:
-            return
-
-        target = self.current_band.shift_target_count
-
-        if target <= 0:
-            self.page.set_shift_progress(None)
-            return
-
-        duration_hours = self.current_band.shift_duration_hours
-
-        now_utc = datetime.now(timezone.utc)
-
-        elapsed_hours = (
-            (now_utc - self.shift_start_time).total_seconds() / 3600
-        )
-
-        stats = self.inspection_logger.compute_period_stats(
-            self.shift_start_time.isoformat()
-        )
-        produced = stats["total"]
-
-        self.page.set_shift_progress({
-            "produced": produced,
-            "target": target,
-            "elapsed_hours": elapsed_hours,
-            "duration_hours": duration_hours
-        })
-
-        if duration_hours <= 0:
-            return
-
-        elapsed_fraction = min(elapsed_hours / duration_hours, 1.0)
-        expected_by_now = target * elapsed_fraction
-
-        is_behind = produced < expected_by_now * (1 - self.SHIFT_PACE_TOLERANCE)
-
-        if not is_behind:
-            return
-
-        if (
-            self._last_shift_warning_at is not None
-            and (
-                time.perf_counter() - self._last_shift_warning_at
-                < self.SHIFT_WARNING_COOLDOWN_SECONDS
-            )
-        ):
-            return
-
-        self._last_shift_warning_at = time.perf_counter()
-
-        self._notify_shift_behind_pace(produced, target, expected_by_now)
-
-    def _notify_shift_behind_pace(self, produced, target, expected_by_now):
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.is_configured():
-            return
-
-        band_name = (
-            self.current_band.name
-            if self.current_band is not None
-            else "?"
-        )
-
-        text = (
-            f"⏱ Vardiya hedefinin gerisinde - {band_name}\n"
-            f"Üretim: {produced} / {target} "
-            f"(bu saatte beklenen: ~{int(expected_by_now)})"
-        )
-
-        chat_ids = self._telegram_chat_ids(settings.chat_id)
-
-        for chat_id in chat_ids:
-
-            callback = self._telegram_retry_on_failure_callback(
-                kind="message",
-                bot_token=settings.bot_token,
-                chat_id=chat_id,
-                text=text
-            )
-
-            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
-                text, on_sent=callback
-            )
-
-    # -------------------------------------------------
-    # Kamera Netliği (Bulanıklık) Takibi
-    # -------------------------------------------------
-
-    def _maybe_check_blur(self, frame):
-        """
-        Kameradan gelen görüntünün net olup olmadığını periyodik
-        olarak kontrol eder (Laplacian varyansı - bkz. BlurDetector).
-        Tek bir kötü kare (ör. kasa hareket ederken oluşan geçici
-        bulanıklık) uyarı tetiklemez; BLUR_STREAK_THRESHOLD kadar
-        ARDIŞIK kontrolde de bulanık çıkarsa (sürekli bir durum -
-        lens kirli, odak kaymış) arayüzde ve Telegram'da bildirilir.
-        """
-
-        now = time.perf_counter()
-
-        if (
-            now - self._last_blur_check_attempt
-            < self.BLUR_CHECK_INTERVAL_SECONDS
-        ):
-            return
-
-        self._last_blur_check_attempt = now
-
-        if self.current_band is None:
-            return
-
-        sharpness = self.blur_detector.compute_sharpness(frame)
-
-        if self.debug_dialog is not None:
-            self.debug_dialog.set_current_sharpness(sharpness)
-
-        is_blurry = sharpness < self.current_band.blur_threshold
-
-        if is_blurry:
-            self.blur_streak += 1
-        else:
-            self.blur_streak = 0
-            self.page.hide_blur_warning()
-            return
-
-        if self.blur_streak < self.BLUR_STREAK_THRESHOLD:
-            return
-
-        self.page.show_blur_warning(sharpness)
-
-        if (
-            self._last_blur_warning_at is not None
-            and (
-                time.perf_counter() - self._last_blur_warning_at
-                < self.BLUR_WARNING_COOLDOWN_SECONDS
-            )
-        ):
-            return
-
-        self._last_blur_warning_at = time.perf_counter()
-
-        self._notify_blur_detected(sharpness)
-
-    def _notify_blur_detected(self, sharpness):
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.is_configured():
-            return
-
-        band_name = (
-            self.current_band.name
-            if self.current_band is not None
-            else "?"
-        )
-
-        text = (
-            f"📷 Kamera görüntüsü bulanık görünüyor - {band_name}\n"
-            f"Netlik: {sharpness:.1f} (eşik: "
-            f"{self.current_band.blur_threshold:.1f}). Lens kirli/"
-            f"buğulu olabilir ya da odak kaymış olabilir."
-        )
-
-        chat_ids = self._telegram_chat_ids(settings.chat_id)
-
-        for chat_id in chat_ids:
-
-            callback = self._telegram_retry_on_failure_callback(
-                kind="message",
-                bot_token=settings.bot_token,
-                chat_id=chat_id,
-                text=text
-            )
-
-            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
-                text, on_sent=callback
-            )
-
-    # -------------------------------------------------
-    # Referans Fotoğrafı Yaşlanma Hatırlatıcısı
-    # -------------------------------------------------
-
-    def _maybe_check_reference_age(self):
-        """
-        Işık/kamera koşulları zamanla kayabileceğinden, referans
-        fotoğrafı (dosyanın son değiştirilme tarihinden bu yana)
-        band.reference_max_age_days'ten daha eskiyse hatırlatır.
-        Birincil kameranın yanı sıra varsa ek kamera kanallarının
-        referansları da kontrol edilir.
-        """
-
-        now = time.perf_counter()
-
-        if (
-            now - self._last_reference_age_check_attempt
-            < self.REFERENCE_AGE_CHECK_INTERVAL_SECONDS
-        ):
-            return
-
-        self._last_reference_age_check_attempt = now
-
-        if self.current_band is None:
-            return
-
-        max_age_days = self.current_band.reference_max_age_days
-
-        if max_age_days <= 0:
-            self.page.hide_reference_age_warning()
-            return
-
-        stale_channels = self._find_stale_reference_channels(max_age_days)
-
-        if not stale_channels:
-            self.page.hide_reference_age_warning()
-            return
-
-        self.page.show_reference_age_warning(
-            f"Referans fotoğrafı eski görünüyor ({max_age_days}+ gün): "
-            f"{', '.join(stale_channels)}"
-        )
-
-        if (
-            self._last_reference_age_warning_at is not None
-            and (
-                time.perf_counter() - self._last_reference_age_warning_at
-                < self.REFERENCE_AGE_WARNING_COOLDOWN_SECONDS
-            )
-        ):
-            return
-
-        self._last_reference_age_warning_at = time.perf_counter()
-
-        self._notify_reference_age(stale_channels, max_age_days)
-
-    def _find_stale_reference_channels(self, max_age_days) -> list:
-
-        stale = []
-
-        if self._is_reference_stale(self.current_band.reference, max_age_days):
-            stale.append("Birincil")
-
-        for channel in self.current_band.cameras:
-
-            if self._is_reference_stale(channel.reference, max_age_days):
-                stale.append(channel.name)
-
-        return stale
-
-    def _is_reference_stale(self, reference_path, max_age_days) -> bool:
-
-        if not reference_path.exists():
-            return False
-
-        age_seconds = time.time() - reference_path.stat().st_mtime
-
-        return age_seconds >= max_age_days * 86400
-
-    def _notify_reference_age(self, stale_channels, max_age_days):
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.is_configured():
-            return
-
-        band_name = (
-            self.current_band.name
-            if self.current_band is not None
-            else "?"
-        )
-
-        text = (
-            f"🕒 Referans fotoğrafı eskimiş - {band_name}\n"
-            f"{max_age_days}+ gündür yenilenmedi: "
-            f"{', '.join(stale_channels)}\n"
-            "Işık/kamera koşulları değiştiyse referansı yenilemeyi "
-            "düşünün."
-        )
-
-        chat_ids = self._telegram_chat_ids(settings.chat_id)
-
-        for chat_id in chat_ids:
-
-            callback = self._telegram_retry_on_failure_callback(
-                kind="message",
-                bot_token=settings.bot_token,
-                chat_id=chat_id,
-                text=text
-            )
-
-            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
-                text, on_sent=callback
-            )
-
-    # -------------------------------------------------
-    # Otomatik Yedekleme
-    # -------------------------------------------------
-
-    def _maybe_run_auto_backup(self):
-        """
-        Bandın otomatik yedekleme ayarı açıksa ve son yedeklemenin
-        üzerinden auto_backup_interval_hours'tan fazla süre geçtiyse,
-        arka planda bir yedekleme başlatır (dosya kopyalama işlemi
-        UI thread'ini bloklamasın diye). Eski yedekler otomatik
-        temizlenir - bkz. BackupManager.backup_and_cleanup.
-        """
-
-        now = time.perf_counter()
-
-        if (
-            now - self._last_backup_check_attempt
-            < self.BACKUP_CHECK_INTERVAL_SECONDS
-        ):
-            return
-
-        self._last_backup_check_attempt = now
-
-        if self.current_band is None:
-            return
-
-        if not self.current_band.auto_backup_enabled:
-            return
-
-        destination = self.current_band.auto_backup_destination
-
-        if not destination:
-            return
-
-        now_utc = datetime.now(timezone.utc)
-
-        if self.current_band.last_auto_backup_at:
-
-            try:
-
-                last_backup_at = datetime.fromisoformat(
-                    self.current_band.last_auto_backup_at
-                )
-
-                elapsed_hours = (
-                    (now_utc - last_backup_at).total_seconds() / 3600
-                )
-
-                if elapsed_hours < self.current_band.auto_backup_interval_hours:
-                    return
-
-            except Exception:
-                pass
-
-        if (
-            self._backup_thread is not None
-            and self._backup_thread.is_alive()
-        ):
-            return
-
-        band = self.current_band
-        keep_count = band.auto_backup_keep_count
-
-        def _run():
-
-            try:
-
-                self.backup_manager.backup_and_cleanup(
-                    band, destination, keep_count
-                )
-
-            except Exception as e:
-
-                app_logger.warning(
-                    "Otomatik yedekleme başarısız: %s -> %s (%s)",
-                    band.name, destination, e
-                )
-
-                return
-
-            updated_band = self.band_manager.load_band(band.id)
-            updated_band.last_auto_backup_at = now_utc.isoformat()
-            self.band_manager.save_band(updated_band)
-
-            if band is self.current_band:
-                self.current_band.last_auto_backup_at = now_utc.isoformat()
-
-            app_logger.info(
-                "Otomatik yedekleme tamamlandı: %s -> %s",
-                band.name, destination
-            )
-
-        self._backup_thread = threading.Thread(target=_run, daemon=True)
-        self._backup_thread.start()
-
-    # -------------------------------------------------
-    # ArUco Marker ile Otomatik Model Tespiti
-    # -------------------------------------------------
-
-    def _handle_marker_model_detection(self, result) -> bool:
-        """
-        Bu karede görülen sol-üst tanı marker ID'sini işler:
-        - Aynı ID MARKER_SWITCH_CONFIRM_FRAMES kadar ardışık
-          görülmeden hiçbir şey yapmaz (titreme filtresi).
-        - Zaten seçili modelin marker'ıysa dokunmaz.
-        - Bilinen bir modelin marker'ıysa o modele otomatik geçer.
-        - Hiçbir modelle eşleşmiyorsa "tanınmayan kasa" akışını
-          tetikler ve True döner (bu karede OK/NG kararı
-          loglanmamalı/Telegram'a bildirilmemeli).
-        """
-
-        candidate_id = result.get("identity_marker_id")
-
-        if candidate_id == self._pending_marker_candidate:
-            self._pending_marker_streak += 1
-        else:
-            self._pending_marker_candidate = candidate_id
-            self._pending_marker_streak = 1
-
-        if self._pending_marker_streak < self.MARKER_SWITCH_CONFIRM_FRAMES:
-            return False
-
-        if candidate_id is None:
-            return False
-
-        current_marker_id = (
-            self.current_model.marker_id
-            if self.current_model is not None
-            else None
-        )
-
-        if candidate_id == current_marker_id:
-            self.page.hide_unknown_kasa_warning()
-            return False
-
-        model = self._marker_id_to_model.get(candidate_id)
-
-        if model is not None:
-            self._switch_to_model_by_marker(model)
-            return False
-
-        self._handle_unknown_kasa(candidate_id, result)
-        return True
-
-    def _switch_to_model_by_marker(self, model):
-
-        index = next(
-            i for i, m in enumerate(self.models) if m is model
-        )
-
-        app_logger.info(
-            "[%s] kasa modeli marker ile otomatik değişti: %s -> %s "
-            "(marker %s)",
-            self.operator_name,
-            self.current_model.name if self.current_model else "-",
-            model.name,
-            model.marker_id
-        )
-
-        self.page.model_combo.blockSignals(True)
-        self.page.model_combo.setCurrentIndex(index)
-        self.page.model_combo.blockSignals(False)
-
-        # recipe_manager + inspection_controller'ı yeniden kurar.
-        self._select_model(index)
-
-        self.page.hide_unknown_kasa_warning()
-
-    def _handle_unknown_kasa(self, candidate_id, result):
-
-        self.page.show_unknown_kasa_warning(
-            f"Tanınmayan kasa (marker {candidate_id}) — mühendis "
-            "incelemesi için kaydedildi."
-        )
-
-        if candidate_id == self._last_unknown_marker_id_captured:
-            # Aynı bilinmeyen kasa hâlâ kamerada - her karede tekrar
-            # fotoğraf/kayıt oluşturma.
-            return
-
-        self._last_unknown_marker_id_captured = candidate_id
-
-        roi_states = {
-            name: data.get("state")
-            for name, data in (result.get("results") or {}).items()
-        }
-
-        image = result.get("reference_display")
-
-        if image is None:
-            image = result.get("reference")
-
-        self.unknown_kasa_capture_manager.save(
-            self.current_band, image, candidate_id, roi_states
-        )
-
-        self._notify_unknown_kasa(candidate_id)
-
-    def _notify_unknown_kasa(self, candidate_id):
-
-        if (
-            self._last_unknown_kasa_notified_at is not None
-            and (
-                time.perf_counter() - self._last_unknown_kasa_notified_at
-                < self.UNKNOWN_KASA_NOTIFY_COOLDOWN_SECONDS
-            )
-        ):
-            return
-
-        self._last_unknown_kasa_notified_at = time.perf_counter()
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.is_configured():
-            return
-
-        band_name = (
-            self.current_band.name
-            if self.current_band is not None
-            else "?"
-        )
-
-        text = (
-            f"❓ Tanınmayan kasa - {band_name}\n"
-            f"Marker ID: {candidate_id}. Fotoğraf ve göz durumları "
-            "kaydedildi, model tanımı gerekiyor."
-        )
-
-        for chat_id in self._telegram_chat_ids(settings.chat_id):
-
-            callback = self._telegram_retry_on_failure_callback(
-                kind="message",
-                bot_token=settings.bot_token,
-                chat_id=chat_id,
-                text=text
-            )
-
-            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
-                text, on_sent=callback
-            )
-
-    # -------------------------------------------------
-    # Telegram Reaksiyon ile NG -> OK Düzeltme
-    # -------------------------------------------------
-
-    def _start_telegram_reaction_poller(self):
-
-        settings = self.telegram_settings_manager.load()
-
-        if not settings.react_to_confirm or not settings.is_configured():
-            return
-
-        self.telegram_reaction_poller = TelegramReactionPoller(
-            settings.bot_token,
-            on_reaction=self._on_telegram_reaction
-        )
-
-        self.telegram_reaction_poller.start()
-
-    def _stop_telegram_reaction_poller(self):
-
-        if self.telegram_reaction_poller is not None:
-
-            self.telegram_reaction_poller.stop()
-            self.telegram_reaction_poller = None
-
-    def _on_telegram_reaction(self, message_id: int, emoji: str):
-        """
-        TelegramReactionPoller'ın arka plan thread'inden çağrılır.
-        Sadece veri/DB katmanına dokunur (thread-safe), Qt widget'larına
-        DOKUNMAZ.
-        """
-
-        settings = self.telegram_settings_manager.load()
-
-        if emoji != settings.confirm_emoji:
-            return
-
-        if self.inspection_logger is None:
-            return
-
-        record_id = self.inspection_logger.find_record_by_telegram_message_id(
-            message_id
-        )
-
-        if record_id is None:
-            return
-
-        self.inspection_logger.mark_reviewed_ok(
-            record_id,
-            operator_name=f"Telegram ({emoji})"
-        )
-
-        app_logger.info(
-            "[Telegram] #%s kaydı %s tepkisiyle OK'e çevrildi",
-            record_id,
-            emoji
-        )
-
-    def _connect_arduino(self):
-
-        if self.arduino_controller is not None:
-            self.arduino_controller.close()
-            self.arduino_controller = None
-
-        port = self.current_band.arduino_port
-
-        if not port:
-            return
-
-        self.arduino_controller = ArduinoController(port)
-
-        if self.arduino_controller.is_connected():
-
-            app_logger.info(
-                "Arduino'ya bağlandı: %s (band=%s)",
-                port,
-                self.current_band.name
-            )
-
-        else:
-
-            app_logger.warning(
-                "Arduino'ya bağlanılamadı: %s (band=%s)",
-                port,
-                self.current_band.name
-            )
-
-    def _attempt_arduino_reconnect(self):
-        """
-        Kamera gibi Arduino da (kablo çekilmesi, USB kopması vb.)
-        bağlantı koptuğunda kendiliğinden tekrar bağlanmayı dener.
-        Her tick'te değil, ARDUINO_RECONNECT_INTERVAL_SECONDS'ta bir
-        denenir (bağlantı denemesi ~2 saniye bloklayabildiği için).
-        """
-
-        now = time.perf_counter()
-
-        if (
-            now - self.last_arduino_reconnect_attempt
-            < self.ARDUINO_RECONNECT_INTERVAL_SECONDS
-        ):
-            return
-
-        self.last_arduino_reconnect_attempt = now
-
-        port = self.arduino_controller.port
-
-        self.arduino_controller.close()
-        self.arduino_controller = ArduinoController(port)
-
-        if self.arduino_controller.is_connected():
-
-            app_logger.info(
-                "Arduino ile bağlantı yeniden kuruldu: %s",
-                port
-            )
-
     def _open_camera(self, camera_index):
 
         cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
@@ -1838,12 +736,10 @@ class InspectionUIController:
 
     def _attempt_camera_reconnect(self):
 
-        now = time.perf_counter()
-
-        if now - self.last_reconnect_attempt < self.RECONNECT_INTERVAL_SECONDS:
+        if not self._throttled(
+            "last_reconnect_attempt", self.RECONNECT_INTERVAL_SECONDS
+        ):
             return
-
-        self.last_reconnect_attempt = now
 
         camera_index = (
             self.current_band.camera
@@ -1871,46 +767,6 @@ class InspectionUIController:
         )
 
         self.page.set_status("Kamera yeniden bağlandı - CONNECTED")
-
-    # -------------------------------------------------
-    # Disk Alanı Kontrolü
-    # -------------------------------------------------
-
-    def _check_disk_space(self):
-
-        now = time.perf_counter()
-
-        if now - self.last_disk_check < self.DISK_CHECK_INTERVAL_SECONDS:
-            return
-
-        self.last_disk_check = now
-
-        check_path = (
-            self.current_band.root
-            if self.current_band is not None
-            else self.band_manager.root
-        )
-
-        free_gb = get_free_space_gb(check_path)
-
-        if free_gb < self.DISK_WARNING_THRESHOLD_GB:
-
-            self.page.show_disk_warning(free_gb)
-
-            if not self.disk_warning_active:
-
-                app_logger.warning(
-                    "Disk alanı azalıyor: %.1f GB kaldı (band=%s)",
-                    free_gb,
-                    self.current_band.name if self.current_band is not None else "?"
-                )
-
-                self.disk_warning_active = True
-
-        else:
-
-            self.page.hide_disk_warning()
-            self.disk_warning_active = False
 
     def _stop(self):
 
