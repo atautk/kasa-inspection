@@ -7,6 +7,7 @@ from pathlib import Path
 
 from .band import Band
 from .camera_channel import CameraChannel
+from .shift_window import ShiftWindow
 from modules.utils.logger import get_logger
 
 app_logger = get_logger()
@@ -141,6 +142,17 @@ class BandManager:
             for entry in data.get("cameras", [])
         ]
 
+        shifts = [
+            ShiftWindow(
+                id=entry["id"],
+                name=entry["name"],
+                start=entry["start"],
+                end=entry["end"],
+                operator=entry.get("operator", "")
+            )
+            for entry in data.get("shifts", [])
+        ]
+
         return Band(
 
             id=data["id"],
@@ -167,9 +179,7 @@ class BandManager:
 
             cameras=cameras,
 
-            shift_target_count=data.get("shift_target_count", 0),
-
-            shift_duration_hours=data.get("shift_duration_hours", 8.0),
+            shifts=shifts,
 
             blur_threshold=data.get("blur_threshold", 100.0),
 
@@ -229,8 +239,17 @@ class BandManager:
                 for channel in band.cameras
             ],
 
-            "shift_target_count": band.shift_target_count,
-            "shift_duration_hours": band.shift_duration_hours,
+            "shifts": [
+                {
+                    "id": shift.id,
+                    "name": shift.name,
+                    "start": shift.start,
+                    "end": shift.end,
+                    "operator": shift.operator
+                }
+                for shift in band.shifts
+            ],
+
             "blur_threshold": band.blur_threshold,
             "reference_max_age_days": band.reference_max_age_days,
             "training_data_collection_enabled": (
@@ -303,6 +322,63 @@ class BandManager:
         band.cameras = [
             channel for channel in band.cameras
             if channel.id != channel_id
+        ]
+
+        self.save_band(band)
+
+    # -------------------------------------------------
+    # Vardiya Pencereleri (sabit saat aralıkları)
+    # -------------------------------------------------
+
+    def add_shift(
+        self,
+        band: Band,
+        name: str,
+        start: str,
+        end: str,
+        operator: str = ""
+    ) -> ShiftWindow:
+
+        shift = ShiftWindow(
+            id=uuid.uuid4().hex[:8],
+            name=name,
+            start=start,
+            end=end,
+            operator=operator
+        )
+
+        band.shifts.append(shift)
+
+        self.save_band(band)
+
+        return shift
+
+    def update_shift(
+        self,
+        band: Band,
+        shift_id: str,
+        name: str,
+        start: str,
+        end: str,
+        operator: str = ""
+    ):
+
+        for shift in band.shifts:
+
+            if shift.id == shift_id:
+                shift.name = name
+                shift.start = start
+                shift.end = end
+                shift.operator = operator
+                break
+
+        self.save_band(band)
+
+    def remove_shift(self, band: Band, shift_id: str):
+
+        band.shifts = [
+            shift for shift in band.shifts
+            if shift.id != shift_id
         ]
 
         self.save_band(band)

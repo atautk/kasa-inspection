@@ -1,6 +1,5 @@
 import time
 import winsound
-from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
@@ -138,13 +137,10 @@ class InspectionUIController(
         self._telegram_report_thread = None
         self._last_report_check_attempt = 0.0
 
-        # Vardiya bazlı üretim takibi (bkz. ShiftTrackingMixin).
-        # shift_start_time, _start() ilk çağrıldığında (ya da band
-        # değiştiğinde) ayarlanır; band.shift_target_count == 0 ise
-        # tüm takip/uyarı devre dışı kalır.
-        self.shift_start_time = None
+        # Vardiya bazlı üretim sayacı (bkz. ShiftTrackingMixin). Aktif
+        # pencere her kontrolde band.shifts'e göre yeniden hesaplanır,
+        # ayrı bir "vardiya başladı" durumu tutulmaz.
         self._last_shift_check_attempt = 0.0
-        self._last_shift_warning_at = None
 
         # Kamera netliği (bulanıklık) takibi - bkz. BlurDetectionMixin.
         # Yanlış NG'lerin bir nedeni kamera odağı/lens kirliliği
@@ -361,10 +357,9 @@ class InspectionUIController(
 
         self.inspection_logger = InspectionLogger(self.current_band)
 
-        # Band değişince önceki bandın vardiya ilerlemesi anlamsız
-        # kalır - yeni band seçilince sıfırdan başlar.
-        self.shift_start_time = None
-        self._last_shift_warning_at = None
+        # Band değişince önceki bandın vardiya göstergesi anlamsız
+        # kalır - bir sonraki kontrolde yeni bandın pencerelerine
+        # göre yeniden hesaplanana kadar gizlenir.
         self.page.set_shift_progress(None)
 
         if self.debug_dialog is not None:
@@ -648,12 +643,6 @@ class InspectionUIController(
 
         self._connect_arduino()
         self._start_telegram_reaction_poller()
-
-        # Vardiya, bu banda ilk kez Başlat'a basıldığında başlar.
-        # Aynı vardiya içinde durdurup tekrar başlatmak ilerlemeyi
-        # sıfırlamaz (kısa bir mola vardiyayı bitirmez).
-        if self.shift_start_time is None:
-            self.shift_start_time = datetime.now(timezone.utc)
 
         self.running = True
         self.camera_connected = True

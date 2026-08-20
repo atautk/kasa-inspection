@@ -62,9 +62,9 @@ kod İngilizce yazılmıştır.
   (yanlış tespiti işaretleyip düzeltme — orijinal sonuç ileride model eğitimi
   için saklanır), yedekleme, Excel'e aktarma
 - İstatistikler sekmesi: genel OK/NG dağılımı için pasta grafiği, günlük NG
-  oranı trendi, vardiya bazlı NG oranı trendi (bandın vardiya süresine göre
-  gece yarısından hesaplanan vardiya pencereleri), model/ROI bazında tablo
-  veya çubuk grafik arasında geçiş
+  oranı trendi, vardiya bazlı NG oranı trendi (bandın tanımlı sabit vardiya
+  pencerelerine göre, ör. "Sabah" 07:30-15:30), model/ROI bazında tablo veya
+  çubuk grafik arasında geçiş
 
 **Ortak**
 - PIN tabanlı erişim kontrolü (varsayılan yönetici: `Yönetici` / `0000`,

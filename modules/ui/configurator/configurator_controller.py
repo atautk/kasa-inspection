@@ -461,24 +461,27 @@ class ConfiguratorController:
         if self.current_band is None:
             return
 
-        dialog = ShiftSettingsDialog(self.current_band, self.window)
+        before = {shift.id for shift in self.current_band.shifts}
 
-        if dialog.exec() != ShiftSettingsDialog.Accepted:
-            return
-
-        self.current_band.shift_target_count = dialog.get_target_count()
-        self.current_band.shift_duration_hours = dialog.get_duration_hours()
-
-        self.band_manager.save_band(self.current_band)
-
-        app_logger.info(
-            "[%s] vardiya ayarları değiştirildi: %s -> hedef %d kasa / "
-            "%.1f saat",
-            self.operator_name,
-            self.current_band.name,
-            self.current_band.shift_target_count,
-            self.current_band.shift_duration_hours
+        dialog = ShiftSettingsDialog(
+            self.band_manager,
+            self.current_band,
+            operator_manager=self.operator_manager,
+            parent=self.window
         )
+
+        dialog.exec()
+
+        after = {shift.id for shift in self.current_band.shifts}
+
+        if before != after:
+
+            app_logger.info(
+                "[%s] vardiya pencereleri güncellendi: %s (%d pencere)",
+                self.operator_name,
+                self.current_band.name,
+                len(self.current_band.shifts)
+            )
 
     # -------------------------------------------------
     # Referans Yenileme Hatırlatıcısı

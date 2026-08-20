@@ -1,109 +1,111 @@
-from datetime import datetime, timezone
-
-from modules.core.telegram_notifier import TelegramNotifier
+from datetime import datetime, timedelta, timezone
 
 
 class ShiftTrackingMixin:
     """
-    Vardiya bazlı üretim takibi: bandın vardiya hedefi tanımlıysa
-    (shift_target_count > 0), vardiya başlangıcından bu yana kaç
-    kasa incelendiğini hesaplar, arayüzde gösterir ve beklenen
-    tempoya göre ciddi şekilde geride kalınmışsa Telegram'dan uyarır.
-    Chat id / retry-callback için TelegramMixin'e bağımlıdır.
+    Vardiya bazlı üretim sayacı: bandın tanımlı vardiya pencereleri
+    varsa (bkz. Band.shifts, ShiftSettingsDialog), şu an içinde
+    bulunulan pencereyi bulur ve o pencerenin başlangıcından bu yana
+    kaç kasa incelendiğini arayüzde gösterir. Üretim hedefi/tempo
+    takibi ve buna bağlı Telegram uyarısı YOK - sadece bir sayaç.
+    Şu an aktif bir vardiya penceresi içinde değilsek (veya hiç
+    pencere tanımlı değilse) gösterge gizlenir.
     """
 
     SHIFT_CHECK_INTERVAL_SECONDS = 60.0
-    SHIFT_PACE_TOLERANCE = 0.2
-    SHIFT_WARNING_COOLDOWN_SECONDS = 3600.0
 
     def _maybe_check_shift_progress(self):
 
         if not self._throttled(
-            "_last_shift_check_attempt",
-            self.SHIFT_CHECK_INTERVAL_SECONDS
+            "_last_shift_check_attempt", self.SHIFT_CHECK_INTERVAL_SECONDS
         ):
             return
 
         if self.current_band is None or self.inspection_logger is None:
             return
 
-        if self.shift_start_time is None:
-            return
+        active = self._active_shift_window(self.current_band.shifts)
 
-        target = self.current_band.shift_target_count
-
-        if target <= 0:
+        if active is None:
             self.page.set_shift_progress(None)
             return
 
-        duration_hours = self.current_band.shift_duration_hours
+        shift, window_start = active
 
-        now_utc = datetime.now(timezone.utc)
-
-        elapsed_hours = (
-            (now_utc - self.shift_start_time).total_seconds() / 3600
-        )
-
+        # InspectionLogger kayıtları UTC'de saklar ve compute_period_stats
+        # "since" ile düz metin karşılaştırması yapar - pencere
+        # başlangıcı da UTC'ye çevrilmeden gönderilirse (yerel saat
+        # dilimi farkı nedeniyle) karşılaştırma yanlış sonuç verir.
         stats = self.inspection_logger.compute_period_stats(
-            self.shift_start_time.isoformat()
+            window_start.astimezone(timezone.utc).isoformat()
         )
         produced = stats["total"]
 
         self.page.set_shift_progress({
             "produced": produced,
-            "target": target,
-            "elapsed_hours": elapsed_hours,
-            "duration_hours": duration_hours
+            "name": shift.name,
+            "start": shift.start,
+            "end": shift.end,
+            "operator": shift.operator
         })
 
-        if duration_hours <= 0:
-            return
+    def _active_shift_window(self, shifts):
+        """
+        Şu an (yerel saatle) içinde bulunulan vardiya penceresini
+        bulur - listedeki ilk eşleşen pencere kazanır (çakışan
+        pencere tanımlanmışsa). Hiçbiri şu an aktif değilse None
+        döner.
+        """
 
-        elapsed_fraction = min(elapsed_hours / duration_hours, 1.0)
-        expected_by_now = target * elapsed_fraction
+        if not shifts:
+            return None
 
-        is_behind = produced < expected_by_now * (1 - self.SHIFT_PACE_TOLERANCE)
+        now_local = datetime.now().astimezone()
 
-        if not is_behind:
-            return
+        for shift in shifts:
 
-        if not self._cooldown_ready(
-            "_last_shift_warning_at", self.SHIFT_WARNING_COOLDOWN_SECONDS
-        ):
-            return
+            window_start = self._shift_window_start_for(shift, now_local)
 
-        self._notify_shift_behind_pace(produced, target, expected_by_now)
+            if window_start is not None:
+                return shift, window_start
 
-    def _notify_shift_behind_pace(self, produced, target, expected_by_now):
+        return None
 
-        settings = self.telegram_settings_manager.load()
+    def _shift_window_start_for(self, shift, now_local):
+        """
+        `shift` (start/end "HH:MM") için, `now_local` bu pencerenin
+        içindeyse pencerenin başlangıç zamanını döner - günü aşan
+        (ör. 22:00-06:00 gece vardiyası) pencereler de desteklenir.
+        `now_local` pencerenin dışındaysa None döner.
+        """
 
-        if not settings.is_configured():
-            return
+        try:
+            start_t = datetime.strptime(shift.start, "%H:%M").time()
+            end_t = datetime.strptime(shift.end, "%H:%M").time()
+        except ValueError:
+            return None
 
-        band_name = (
-            self.current_band.name
-            if self.current_band is not None
-            else "?"
+        overnight = end_t <= start_t
+
+        today_start = now_local.replace(
+            hour=start_t.hour, minute=start_t.minute,
+            second=0, microsecond=0
+        )
+        today_end = now_local.replace(
+            hour=end_t.hour, minute=end_t.minute,
+            second=0, microsecond=0
         )
 
-        text = (
-            f"⏱ Vardiya hedefinin gerisinde - {band_name}\n"
-            f"Üretim: {produced} / {target} "
-            f"(bu saatte beklenen: ~{int(expected_by_now)})"
-        )
+        if overnight:
+            today_end += timedelta(days=1)
 
-        chat_ids = self._telegram_chat_ids(settings.chat_id)
+        if today_start <= now_local < today_end:
+            return today_start
 
-        for chat_id in chat_ids:
+        yesterday_start = today_start - timedelta(days=1)
+        yesterday_end = today_end - timedelta(days=1)
 
-            callback = self._telegram_retry_on_failure_callback(
-                kind="message",
-                bot_token=settings.bot_token,
-                chat_id=chat_id,
-                text=text
-            )
+        if yesterday_start <= now_local < yesterday_end:
+            return yesterday_start
 
-            TelegramNotifier(settings.bot_token, chat_id).send_message_async(
-                text, on_sent=callback
-            )
+        return None

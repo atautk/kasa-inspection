@@ -480,23 +480,36 @@ class InspectionLogger:
     # Vardiya Bazlı NG Oranı Trendi
     # -------------------------------------------------
     #
-    # Geçmiş vardiyaların ne zaman başladığı hiçbir yerde
-    # saklanmıyor (InspectionUIController.shift_start_time sadece
-    # o an çalışan oturum için bellekte tutulur, kalıcı değildir).
-    # Bu yüzden vardiya sınırları, gece yarısından başlayarak
-    # shift_duration_hours'a göre HESAPLANIR (ör. 8 saatlik
-    # vardiyalarda 00:00-08:00 / 08:00-16:00 / 16:00-24:00) -
-    # klasik 3 vardiyalı üretim düzenine denk gelir ve yeni bir
-    # kalıcı depolamaya ihtiyaç duymadan geçmişe dönük hesaplanabilir.
+    # Bandın tanımlı vardiya pencereleri (bkz. Band.shifts,
+    # ShiftSettingsDialog) sabit saat aralıklarıdır (ör. "Sabah"
+    # 07:30-15:30). Geçmiş vardiyaların ne zaman başladığı ayrıca
+    # saklanmaz - her kaydın yerel saati, tanımlı pencerelerden
+    # hangisine düşüyorsa ona göre HESAPLANIR. Hiçbir pencereye
+    # düşmeyen kayıtlar (mesai dışı üretim) trende dahil edilmez -
+    # bu artık sadece tanımlı vardiyaların NG oranını gösterir.
 
     def compute_shift_trend(
         self,
-        shift_duration_hours: float,
+        shifts: list,
         limit_shifts: int = 20
     ) -> list:
 
-        if shift_duration_hours <= 0:
-            shift_duration_hours = 8.0
+        parsed_shifts = []
+
+        for shift in shifts:
+
+            try:
+                start_t = datetime.strptime(shift.start, "%H:%M").time()
+                end_t = datetime.strptime(shift.end, "%H:%M").time()
+            except (ValueError, AttributeError):
+                continue
+
+            parsed_shifts.append(
+                (shift.name, start_t, end_t, end_t <= start_t)
+            )
+
+        if not parsed_shifts:
+            return []
 
         conn = self._connect()
 
@@ -513,7 +526,7 @@ class InspectionLogger:
 
             conn.close()
 
-        shifts = {}
+        buckets = {}
 
         for row in rows:
 
@@ -522,48 +535,63 @@ class InspectionLogger:
             except Exception:
                 continue
 
-            day_start = local_dt.replace(
-                hour=0, minute=0, second=0, microsecond=0
-            )
+            day = local_dt.date()
 
-            hours_since_midnight = (
-                (local_dt - day_start).total_seconds() / 3600
-            )
+            for name, start_t, end_t, overnight in parsed_shifts:
 
-            shift_index = int(hours_since_midnight // shift_duration_hours)
+                window_start = datetime.combine(
+                    day, start_t, tzinfo=local_dt.tzinfo
+                )
+                window_end = datetime.combine(
+                    day, end_t, tzinfo=local_dt.tzinfo
+                )
 
-            shift_start = day_start + timedelta(
-                hours=shift_index * shift_duration_hours
-            )
+                if overnight:
+                    window_end += timedelta(days=1)
 
-            shift_key = shift_start.isoformat()
+                if local_dt < window_start and overnight:
+                    window_start -= timedelta(days=1)
+                    window_end -= timedelta(days=1)
 
-            shift_stats = shifts.setdefault(
-                shift_key, {"start": shift_start, "ok": 0, "ng": 0}
-            )
+                if not (window_start <= local_dt < window_end):
+                    continue
 
-            if row["overall_result"] == "OK":
-                shift_stats["ok"] += 1
-            else:
-                shift_stats["ng"] += 1
+                bucket_key = (name, window_start.isoformat())
 
-        shift_keys = sorted(shifts.keys())[-limit_shifts:]
+                bucket_stats = buckets.setdefault(
+                    bucket_key,
+                    {"name": name, "start": window_start, "ok": 0, "ng": 0}
+                )
+
+                if row["overall_result"] == "OK":
+                    bucket_stats["ok"] += 1
+                else:
+                    bucket_stats["ng"] += 1
+
+                break
+
+        bucket_keys = sorted(
+            buckets.keys(), key=lambda key: buckets[key]["start"]
+        )[-limit_shifts:]
 
         trend = []
 
-        for shift_key in shift_keys:
+        for bucket_key in bucket_keys:
 
-            shift_stats = shifts[shift_key]
+            bucket_stats = buckets[bucket_key]
 
-            total = shift_stats["ok"] + shift_stats["ng"]
+            total = bucket_stats["ok"] + bucket_stats["ng"]
 
-            ratio = (shift_stats["ng"] / total * 100) if total else 0.0
+            ratio = (bucket_stats["ng"] / total * 100) if total else 0.0
 
             trend.append({
-                "date": shift_stats["start"].strftime("%Y-%m-%d %H:%M"),
+                "date": (
+                    f"{bucket_stats['start'].strftime('%Y-%m-%d %H:%M')} "
+                    f"{bucket_stats['name']}"
+                ),
                 "total": total,
-                "ok": shift_stats["ok"],
-                "ng": shift_stats["ng"],
+                "ok": bucket_stats["ok"],
+                "ng": bucket_stats["ng"],
                 "ng_ratio": ratio
             })
 

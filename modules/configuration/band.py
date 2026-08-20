@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from .camera_channel import CameraChannel
+from .shift_window import ShiftWindow
 
 
 @dataclass(slots=True)
@@ -30,11 +31,13 @@ class Band:
     # sayede tek kameralı bandlar hiç değişmeden çalışmaya devam eder.
     cameras: list = field(default_factory=list)
 
-    # Vardiya bazlı üretim takibi: bir vardiyada üretilmesi beklenen
-    # kasa sayısı ve vardiyanın kaç saat sürdüğü. 0 = kapalı (hiç
-    # takip/uyarı yapılmaz) - bkz. InspectionUIController.
-    shift_target_count: int = 0
-    shift_duration_hours: float = 8.0
+    # Vardiya pencereleri: kullanıcının tanımladığı, gün içindeki
+    # sabit saat aralıkları (ör. "Sabah" 07:30-15:30). Üretim hedefi/
+    # tempo takibi YOK - sadece pencere içinde kaç kasa incelendiğini
+    # gösterir (bkz. ShiftTrackingMixin) ve istatistiklerdeki vardiya
+    # bazlı NG trendini bu pencerelere göre gruplar (bkz.
+    # InspectionLogger.compute_shift_trend). Boş liste = kapalı.
+    shifts: list = field(default_factory=list)
 
     # Kamera netliği uyarısı: Laplacian varyansı bu değerin altına
     # düşerse görüntü "bulanık" sayılır - bkz. BlurDetector.

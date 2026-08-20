@@ -528,13 +528,11 @@ class LogViewerDialog(QDialog):
             self.inspection_logger.compute_daily_trend(30)
         )
 
-        shift_duration_hours = (
-            self.band.shift_duration_hours if self.band is not None else 8.0
-        )
+        shifts = self.band.shifts if self.band is not None else []
 
         self.shift_trend_chart.set_data(
             self.inspection_logger.compute_shift_trend(
-                shift_duration_hours, limit_shifts=20
+                shifts, limit_shifts=20
             )
         )
 

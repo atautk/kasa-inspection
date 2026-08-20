@@ -350,7 +350,14 @@ def _set_timestamp(logger, record_id, iso_timestamp):
     conn.close()
 
 
-def test_shift_trend_buckets_by_shift_duration(logger):
+def _shift(name, start, end):
+
+    from modules.configuration.shift_window import ShiftWindow
+
+    return ShiftWindow(id=name, name=name, start=start, end=end)
+
+
+def test_shift_trend_buckets_by_defined_windows(logger):
 
     logger.log(make_result(True), "clio")
     id_morning = logger.last_inserted_id
@@ -358,19 +365,19 @@ def test_shift_trend_buckets_by_shift_duration(logger):
     logger.log(make_result(False), "clio")
     id_afternoon = logger.last_inserted_id
 
-    # 8 saatlik vardiyalarda: 02:00 -> 00:00-08:00 vardiyası,
-    # 10:00 -> 08:00-16:00 vardiyası (farklı vardiyalar).
+    # 02:00 -> "Sabah" (00:00-08:00), 10:00 -> "Öğle" (08:00-16:00).
     _set_timestamp(logger, id_morning, _local_iso(hour=2))
     _set_timestamp(logger, id_afternoon, _local_iso(hour=10))
 
-    trend = logger.compute_shift_trend(shift_duration_hours=8.0)
+    shifts = [_shift("Sabah", "00:00", "08:00"), _shift("Öğle", "08:00", "16:00")]
+    trend = logger.compute_shift_trend(shifts)
 
     assert len(trend) == 2
     assert trend[0]["ok"] == 1 and trend[0]["ng"] == 0
     assert trend[1]["ok"] == 0 and trend[1]["ng"] == 1
 
 
-def test_shift_trend_same_shift_aggregates_together(logger):
+def test_shift_trend_same_window_aggregates_together(logger):
 
     logger.log(make_result(True), "clio")
     id_a = logger.last_inserted_id
@@ -378,11 +385,11 @@ def test_shift_trend_same_shift_aggregates_together(logger):
     logger.log(make_result(False), "clio")
     id_b = logger.last_inserted_id
 
-    # İkisi de aynı 00:00-08:00 vardiyasında.
+    # İkisi de aynı "Sabah" (00:00-08:00) penceresinde.
     _set_timestamp(logger, id_a, _local_iso(hour=1))
     _set_timestamp(logger, id_b, _local_iso(hour=6))
 
-    trend = logger.compute_shift_trend(shift_duration_hours=8.0)
+    trend = logger.compute_shift_trend([_shift("Sabah", "00:00", "08:00")])
 
     assert len(trend) == 1
     assert trend[0]["total"] == 2
@@ -391,19 +398,24 @@ def test_shift_trend_same_shift_aggregates_together(logger):
     assert trend[0]["ng_ratio"] == 50.0
 
 
-def test_shift_trend_date_label_matches_shift_start(logger):
+def test_shift_trend_date_label_includes_window_start_and_name(logger):
 
     logger.log(make_result(True), "clio")
 
     _set_timestamp(logger, logger.last_inserted_id, _local_iso(hour=10))
 
-    trend = logger.compute_shift_trend(shift_duration_hours=8.0)
+    trend = logger.compute_shift_trend([_shift("Öğle", "08:00", "16:00")])
 
-    # 10:00 -> 08:00-16:00 vardiyası, etiket vardiyanın BAŞLANGICI olmalı
-    assert trend[0]["date"].endswith("08:00")
+    assert trend[0]["date"].endswith("08:00 Öğle")
 
 
 def test_shift_trend_respects_limit_shifts(logger):
+
+    shifts = [
+        _shift("V1", "00:00", "08:00"),
+        _shift("V2", "08:00", "16:00"),
+        _shift("V3", "16:00", "23:59"),
+    ]
 
     for hour in (0, 8, 16):
 
@@ -412,29 +424,64 @@ def test_shift_trend_respects_limit_shifts(logger):
             logger, logger.last_inserted_id, _local_iso(hour=hour)
         )
 
-    trend = logger.compute_shift_trend(
-        shift_duration_hours=8.0, limit_shifts=2
-    )
+    trend = logger.compute_shift_trend(shifts, limit_shifts=2)
 
     assert len(trend) == 2
 
 
-def test_shift_trend_non_positive_duration_falls_back_to_default(logger):
+def test_shift_trend_excludes_records_outside_defined_windows(logger):
 
     logger.log(make_result(True), "clio")
-    _set_timestamp(logger, logger.last_inserted_id, _local_iso(hour=2))
+    id_inside = logger.last_inserted_id
 
-    trend_zero = logger.compute_shift_trend(shift_duration_hours=0)
-    trend_negative = logger.compute_shift_trend(shift_duration_hours=-5)
-    trend_default = logger.compute_shift_trend(shift_duration_hours=8.0)
+    logger.log(make_result(False), "clio")
+    id_outside = logger.last_inserted_id
 
-    assert trend_zero == trend_default
-    assert trend_negative == trend_default
+    # Sadece 07:30-15:30 tanımlı - 10:00 içeride, 20:00 dışarıda.
+    _set_timestamp(logger, id_inside, _local_iso(hour=10))
+    _set_timestamp(logger, id_outside, _local_iso(hour=20))
+
+    trend = logger.compute_shift_trend([_shift("Sabah", "07:30", "15:30")])
+
+    assert len(trend) == 1
+    assert trend[0]["total"] == 1
+    assert trend[0]["ok"] == 1
+
+
+def test_shift_trend_overnight_window_aggregates_across_midnight(logger):
+
+    logger.log(make_result(True), "clio")
+    id_before_midnight = logger.last_inserted_id
+
+    logger.log(make_result(False), "clio")
+    id_after_midnight = logger.last_inserted_id
+
+    # Gece vardiyası 22:00-06:00 - 23:00 ve (ertesi gün) 02:00 AYNI
+    # vardiyaya ait olmalı.
+    _set_timestamp(logger, id_before_midnight, _local_iso(hour=23))
+    _set_timestamp(
+        logger, id_after_midnight, _local_iso(hour=2, day_offset=1)
+    )
+
+    trend = logger.compute_shift_trend([_shift("Gece", "22:00", "06:00")])
+
+    assert len(trend) == 1
+    assert trend[0]["total"] == 2
+    assert trend[0]["ok"] == 1
+    assert trend[0]["ng"] == 1
+
+
+def test_shift_trend_no_windows_defined_returns_empty(logger):
+
+    logger.log(make_result(True), "clio")
+    _set_timestamp(logger, logger.last_inserted_id, _local_iso(hour=10))
+
+    assert logger.compute_shift_trend([]) == []
 
 
 def test_shift_trend_empty_when_no_records(logger):
 
-    assert logger.compute_shift_trend(shift_duration_hours=8.0) == []
+    assert logger.compute_shift_trend([_shift("Sabah", "07:30", "15:30")]) == []
 
 
 def test_clear_removes_all_records_and_resets_state(logger):

@@ -1,11 +1,10 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
 from modules.configuration.band import Band
 from modules.configuration.inspection_logger import InspectionLogger
-from modules.configuration.telegram_settings import TelegramSettings
-from modules.core.telegram_notifier import TelegramNotifier
+from modules.configuration.shift_window import ShiftWindow
 
 
 @pytest.fixture(scope="module")
@@ -41,9 +40,7 @@ def controller(qapp, tmp_path):
         root=tmp_path / "band_01",
         reference=tmp_path / "band_01" / "reference.png",
         roi=tmp_path / "band_01" / "roi.json",
-        models=tmp_path / "band_01" / "models",
-        shift_target_count=200,
-        shift_duration_hours=8.0
+        models=tmp_path / "band_01" / "models"
     )
     band.root.mkdir(parents=True, exist_ok=True)
 
@@ -68,42 +65,98 @@ def _make_result(ok):
     }
 
 
-def test_no_progress_shown_when_shift_not_started(controller):
+def _window_containing_now(name="Vardiya", margin_minutes=90, operator=""):
+    """Şu anı kapsayan bir vardiya penceresi - testin çalıştığı saatten
+    bağımsız olması için "now"a göre inşa edilir."""
 
-    controller.shift_start_time = None
+    now = datetime.now().astimezone()
+    start = (now - timedelta(minutes=margin_minutes)).strftime("%H:%M")
+    end = (now + timedelta(minutes=margin_minutes)).strftime("%H:%M")
+
+    return ShiftWindow(id=name, name=name, start=start, end=end, operator=operator)
+
+
+def _window_not_containing_now(name="Eski Vardiya"):
+    """Şu andan kesinlikle 2-3 saat önce bitmiş bir pencere."""
+
+    now = datetime.now().astimezone()
+    start = (now - timedelta(hours=3)).strftime("%H:%M")
+    end = (now - timedelta(hours=2)).strftime("%H:%M")
+
+    return ShiftWindow(id=name, name=name, start=start, end=end)
+
+
+def test_no_progress_shown_when_no_shifts_defined(controller):
+
+    controller.current_band.shifts = []
 
     controller._maybe_check_shift_progress()
 
     assert controller.page.shift_label.text() == "Vardiya: -"
 
 
-def test_no_progress_shown_when_target_is_zero(controller):
+def test_no_progress_shown_when_outside_all_windows(controller):
 
-    controller.current_band.shift_target_count = 0
-    controller.shift_start_time = datetime.now(timezone.utc)
+    controller.current_band.shifts = [_window_not_containing_now()]
 
     controller._maybe_check_shift_progress()
 
     assert controller.page.shift_label.text() == "Vardiya: -"
 
 
-def test_progress_label_reflects_produced_count(controller):
+def test_progress_label_reflects_produced_count_and_window_name(controller):
 
-    controller.shift_start_time = datetime.now(timezone.utc) - timedelta(
-        hours=1
-    )
+    window = _window_containing_now("Sabah")
+    controller.current_band.shifts = [window]
 
     controller.inspection_logger.log(_make_result(True), "clio")
     controller.inspection_logger.log(_make_result(False), "clio")
 
     controller._maybe_check_shift_progress()
 
-    assert "2 / 200" in controller.page.shift_label.text()
+    text = controller.page.shift_label.text()
+    assert "2 kasa" in text
+    assert "Sabah" in text
+    assert window.start in text
+    assert window.end in text
+
+
+def test_progress_label_includes_assigned_operator(controller):
+
+    window = _window_containing_now("Sabah", operator="Ahmet Yılmaz")
+    controller.current_band.shifts = [window]
+
+    controller._maybe_check_shift_progress()
+
+    assert "Ahmet Yılmaz" in controller.page.shift_label.text()
+
+
+def test_progress_label_omits_operator_when_unassigned(controller):
+
+    window = _window_containing_now("Sabah")
+    controller.current_band.shifts = [window]
+
+    controller._maybe_check_shift_progress()
+
+    text = controller.page.shift_label.text()
+    assert text.count("—") == 1  # sadece "isim (saat)" ayracı, operatör yok
+
+
+def test_first_matching_window_wins_when_windows_overlap(controller):
+
+    controller.current_band.shifts = [
+        _window_not_containing_now("Önce"),
+        _window_containing_now("Aktif"),
+    ]
+
+    controller._maybe_check_shift_progress()
+
+    assert "Aktif" in controller.page.shift_label.text()
 
 
 def test_shift_check_throttles_repeated_calls(controller, monkeypatch):
 
-    controller.shift_start_time = datetime.now(timezone.utc)
+    controller.current_band.shifts = [_window_containing_now()]
 
     calls = []
 
@@ -123,101 +176,16 @@ def test_shift_check_throttles_repeated_calls(controller, monkeypatch):
     assert len(calls) == 1
 
 
-def test_no_warning_when_on_pace(controller, monkeypatch):
+def test_shift_progress_resets_on_band_change(controller):
 
-    controller.telegram_settings_manager.save(
-        TelegramSettings(bot_token="tok", chat_id="chat")
-    )
-
-    # 1 saat geçti (8 saatlik vardiyanın 1/8'i = %12.5), hedefin
-    # %12.5'i = 25 kasa gerekir; 30 kasa üretilmiş -> tempoda.
-    controller.shift_start_time = datetime.now(timezone.utc) - timedelta(
-        hours=1
-    )
-
-    for _ in range(30):
-        controller.inspection_logger.log(_make_result(True), "clio")
-
-    sent = []
-
-    monkeypatch.setattr(
-        TelegramNotifier,
-        "send_message",
-        lambda self, text: (sent.append(text), 1)[1]
-    )
-
+    controller.current_band.shifts = [_window_containing_now()]
     controller._maybe_check_shift_progress()
 
-    assert sent == []
-
-
-def test_warning_sent_when_behind_pace(controller, monkeypatch):
-
-    controller.telegram_settings_manager.save(
-        TelegramSettings(bot_token="tok", chat_id="chat")
-    )
-
-    # 4 saat geçti (8 saatlik vardiyanın yarısı), hedefin yarısı
-    # (100) beklenir; sadece 5 kasa üretilmiş -> ciddi şekilde geride.
-    controller.shift_start_time = datetime.now(timezone.utc) - timedelta(
-        hours=4
-    )
-
-    for _ in range(5):
-        controller.inspection_logger.log(_make_result(True), "clio")
-
-    sent = []
-
-    monkeypatch.setattr(
-        TelegramNotifier,
-        "send_message",
-        lambda self, text: (sent.append(text), 1)[1]
-    )
-
-    controller._maybe_check_shift_progress()
-
-    assert len(sent) == 1
-    assert "Test Bandı" in sent[0]
-    assert "5 / 200" in sent[0]
-
-
-def test_warning_cooldown_prevents_immediate_repeat(controller, monkeypatch):
-
-    controller.telegram_settings_manager.save(
-        TelegramSettings(bot_token="tok", chat_id="chat")
-    )
-
-    controller.shift_start_time = datetime.now(timezone.utc) - timedelta(
-        hours=4
-    )
-
-    sent = []
-
-    monkeypatch.setattr(
-        TelegramNotifier,
-        "send_message",
-        lambda self, text: (sent.append(text), 1)[1]
-    )
-
-    controller._last_shift_check_attempt = 0.0
-    controller._maybe_check_shift_progress()
-
-    controller._last_shift_check_attempt = 0.0
-    controller._maybe_check_shift_progress()
-
-    assert len(sent) == 1
-
-
-def test_shift_state_resets_on_band_change(controller):
-
-    controller.shift_start_time = datetime.now(timezone.utc)
-    controller._last_shift_warning_at = 123.0
+    assert controller.page.shift_label.text() != "Vardiya: -"
 
     controller.bands = [controller.current_band]
     controller.models = []
 
     controller._select_band(0)
 
-    assert controller.shift_start_time is None
-    assert controller._last_shift_warning_at is None
     assert controller.page.shift_label.text() == "Vardiya: -"

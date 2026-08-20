@@ -71,43 +71,99 @@ def test_load_band_without_confirm_frames_field_defaults_to_three(
     assert reloaded.confirm_frames == 3
 
 
-def test_new_band_has_shift_tracking_disabled_by_default(manager):
+def test_new_band_has_no_shift_windows_by_default(manager):
 
     band = manager.create_band("Clio Hattı")
 
-    assert band.shift_target_count == 0
-    assert band.shift_duration_hours == 8.0
+    assert band.shifts == []
 
 
-def test_shift_settings_save_and_load_roundtrip(manager):
+def test_add_shift_appends_and_persists(manager):
 
     band = manager.create_band("Clio Hattı")
 
-    band.shift_target_count = 250
-    band.shift_duration_hours = 10.5
+    shift = manager.add_shift(band, "Sabah", "07:30", "15:30")
 
-    manager.save_band(band)
+    assert shift.name == "Sabah"
+    assert shift.start == "07:30"
+    assert shift.end == "15:30"
+    assert shift.operator == ""
+    assert shift in band.shifts
 
     reloaded = manager.load_band(band.id)
 
-    assert reloaded.shift_target_count == 250
-    assert reloaded.shift_duration_hours == 10.5
+    assert len(reloaded.shifts) == 1
+    assert reloaded.shifts[0].name == "Sabah"
+    assert reloaded.shifts[0].start == "07:30"
+    assert reloaded.shifts[0].end == "15:30"
+    assert reloaded.shifts[0].operator == ""
 
 
-def test_load_band_without_shift_fields_defaults(manager):
+def test_add_shift_with_operator_persists(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    shift = manager.add_shift(band, "Sabah", "07:30", "15:30", "Ahmet Yılmaz")
+
+    assert shift.operator == "Ahmet Yılmaz"
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.shifts[0].operator == "Ahmet Yılmaz"
+
+
+def test_update_shift_changes_fields_and_persists(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    shift = manager.add_shift(band, "Sabah", "07:30", "15:30")
+
+    manager.update_shift(
+        band, shift.id, "Sabah Vardiyası", "08:00", "16:00", "Ahmet Yılmaz"
+    )
+
+    assert band.shifts[0].name == "Sabah Vardiyası"
+    assert band.shifts[0].start == "08:00"
+    assert band.shifts[0].end == "16:00"
+    assert band.shifts[0].operator == "Ahmet Yılmaz"
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.shifts[0].name == "Sabah Vardiyası"
+    assert reloaded.shifts[0].start == "08:00"
+    assert reloaded.shifts[0].end == "16:00"
+    assert reloaded.shifts[0].operator == "Ahmet Yılmaz"
+
+
+def test_remove_shift(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    shift = manager.add_shift(band, "Sabah", "07:30", "15:30")
+    manager.add_shift(band, "Gece", "22:00", "06:00")
+
+    manager.remove_shift(band, shift.id)
+
+    assert len(band.shifts) == 1
+    assert band.shifts[0].name == "Gece"
+
+    reloaded = manager.load_band(band.id)
+
+    assert len(reloaded.shifts) == 1
+
+
+def test_load_band_without_shifts_field_defaults_to_empty_list(manager):
 
     import json
 
     band = manager.create_band("Eski Band")
 
     data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
-    assert "shift_target_count" not in data
-    assert "shift_duration_hours" not in data
+    assert "shifts" not in data
 
     reloaded = manager.load_band(band.id)
 
-    assert reloaded.shift_target_count == 0
-    assert reloaded.shift_duration_hours == 8.0
+    assert reloaded.shifts == []
 
 
 def test_new_band_has_default_blur_threshold(manager):

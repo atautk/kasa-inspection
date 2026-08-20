@@ -376,18 +376,25 @@ class InspectionPage(QWidget):
 
     def set_shift_progress(self, info: dict | None):
         """
-        info: {"produced", "target", "elapsed_hours", "duration_hours"}
-        ya da vardiya takibi kapalıysa (hedef tanımlı değilse) None.
+        info: {"produced", "name", "start", "end", "operator"} - şu an
+        içinde bulunulan vardiya penceresi, o pencerede üretilen kasa
+        sayısı ve (varsa) atanan operatör. Şu an aktif bir pencere
+        yoksa (ya da hiç pencere tanımlı değilse) None.
         """
 
         if info is None:
             self.shift_label.setText("Vardiya: -")
             return
 
-        self.shift_label.setText(
-            f"Vardiya: {info['produced']} / {info['target']} "
-            f"({info['elapsed_hours']:.1f}s / {info['duration_hours']:.1f}s)"
+        text = (
+            f"Vardiya: {info['produced']} kasa — {info['name']} "
+            f"({info['start']}-{info['end']})"
         )
+
+        if info.get("operator"):
+            text += f" — {info['operator']}"
+
+        self.shift_label.setText(text)
 
     # -------------------------------------------------
     # Buton Metinleri
