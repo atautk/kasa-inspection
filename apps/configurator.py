@@ -16,6 +16,7 @@ from modules.ui.common.login_dialog import LoginDialog
 from modules.configuration.operator_manager import OperatorManager
 from modules.utils import accessibility_settings as a11y
 from modules.utils.paths import get_app_root, get_resource_path
+from modules.utils.theme import apply_light_theme
 
 # Kalıcı veriler (band konfigürasyonları, operatör listesi) için kök
 # dizin - paketlenmiş .exe'de proje kaynak koduyla değil, .exe'nin
@@ -27,6 +28,7 @@ def main():
 
     app = QApplication(sys.argv)
 
+    apply_light_theme(app)
     a11y.apply_ui_scale(app)
 
     icon_path = get_resource_path("assets/icon.png")

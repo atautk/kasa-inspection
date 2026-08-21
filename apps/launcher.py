@@ -24,6 +24,7 @@ from PySide6.QtGui import QIcon
 from modules.ui.window_utils import restore_or_center, save_geometry
 from modules.utils import accessibility_settings as a11y
 from modules.utils.paths import get_resource_path
+from modules.utils.theme import apply_light_theme
 
 SETTINGS_KEY = "launcher"
 
@@ -105,6 +106,7 @@ def main():
 
     app = QApplication(sys.argv)
 
+    apply_light_theme(app)
     a11y.apply_ui_scale(app)
 
     icon_path = get_resource_path("assets/icon.png")
