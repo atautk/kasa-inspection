@@ -81,9 +81,15 @@ def _clamp_to_screen(window):
     ekrandan taşabilir ya da tamamen görünmez alanda kalabilir.
     Geri yüklenen geometri her zaman mevcut ekranın kullanılabilir
     alanına sığdırılır.
+
+    window.screen() KULLANILMAZ: bu pencere henüz show() edilmeden,
+    __init__ içinde (native pencere tanıtıcısı/winId oluşmadan)
+    çağrıldığında Windows'ta gerçek bir heap corruption çökmesine
+    (0xc0000374) yol açtığı gözlemlendi - bkz. size_and_center'ın da
+    aynı sebeple zaten sadece primaryScreen() kullanması.
     """
 
-    screen = window.screen() or QGuiApplication.primaryScreen()
+    screen = QGuiApplication.primaryScreen()
 
     if screen is None:
         return
