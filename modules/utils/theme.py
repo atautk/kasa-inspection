@@ -13,6 +13,15 @@ içinde `setBackground(...)` ile ayarlandığından, buradaki QSS bilerek
 renkleri bastırabilir.
 """
 
+from modules.utils.paths import get_resource_path
+
+# QSS url() ters slash'ı yol ayracı olarak tanımıyor, işletim
+# sisteminden bağımsız hep ileri slash kullanılmalı.
+CHEVRON_DOWN_URL = get_resource_path("assets/chevron_down.png").as_posix()
+CHEVRON_DOWN_ACCENT_URL = get_resource_path(
+    "assets/chevron_down_accent.png"
+).as_posix()
+
 BACKGROUND = "#F7F8FA"
 SURFACE = "#FFFFFF"
 BORDER = "#D9DCE3"
@@ -160,9 +169,35 @@ QTimeEdit:disabled, QComboBox:disabled {{
     color: {DISABLED_TEXT};
 }}
 
+/* Bir kez QComboBox'ın kendisi stillendirilince Qt'nin platform
+   aşağı-ok ikonunu otomatik çizmesi durur - kenarlık hilesiyle
+   (border trick) çizilen ok bu Qt/stil kombinasyonunda görünmedi,
+   bu yüzden küçük bir PNG ikonla (assets/chevron_down*.png) elle
+   sağlanıyor. İkon olmadan kutunun çekmeceli (tıklanabilir liste)
+   olduğu hiç belli olmuyordu. */
+
+QComboBox {{
+    padding-right: 24px;
+}}
+
 QComboBox::drop-down {{
+    subcontrol-origin: border;
+    subcontrol-position: top right;
+    width: 22px;
     border: none;
-    width: 20px;
+}}
+
+QComboBox::down-arrow {{
+    image: url("{CHEVRON_DOWN_URL}");
+    width: 10px;
+    height: 10px;
+    subcontrol-origin: border;
+    subcontrol-position: center right;
+    right: 6px;
+}}
+
+QComboBox::down-arrow:on {{
+    image: url("{CHEVRON_DOWN_ACCENT_URL}");
 }}
 
 QComboBox QAbstractItemView {{
@@ -274,5 +309,14 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
 
 
 def apply_light_theme(app):
+    """
+    Windows'un yerel stili ("windowsvista"), QComboBox gibi karmaşık
+    widget'ların alt kontrollerini (::drop-down, ::down-arrow gibi)
+    QSS ile özelleştirmeyi büyük ölçüde yok sayar - bu yüzden aşağı
+    ok ikonu hiç görünmüyordu. "Fusion" stili QSS alt kontrol
+    özelleştirmesini tam destekler, bu yüzden tema uygulanmadan önce
+    ona geçiliyor.
+    """
 
+    app.setStyle("Fusion")
     app.setStyleSheet(STYLESHEET)
