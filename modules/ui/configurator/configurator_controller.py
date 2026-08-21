@@ -123,6 +123,14 @@ class ConfiguratorController:
             self.open_band
         )
 
+        band_page.rename_button.clicked.connect(
+            self.rename_band
+        )
+
+        band_page.delete_button.clicked.connect(
+            self.delete_band
+        )
+
         self.window.validate_action.triggered.connect(
             self.validate_band
         )
@@ -305,6 +313,140 @@ class ConfiguratorController:
             "[%s] yeni band oluşturuldu: %s",
             self.operator_name,
             name
+        )
+
+        self.load_bands()
+
+    # -------------------------------------------------
+
+    def rename_band(self):
+
+        page = self.window.band_page
+
+        item = page.band_list.currentItem()
+
+        if item is None:
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Uyarı",
+
+                "Lütfen bir band seçin."
+
+            )
+
+            return
+
+        band_id = item.data(Qt.UserRole)
+
+        band = self.band_manager.load_band(band_id)
+
+        new_name, ok = QInputDialog.getText(
+
+            self.window,
+
+            "Bandı Yeniden Adlandır",
+
+            "Band Adı",
+
+            text=band.name
+
+        )
+
+        if not ok:
+            return
+
+        new_name = new_name.strip()
+
+        if new_name == "" or new_name == band.name:
+            return
+
+        old_name = band.name
+
+        band.name = new_name
+
+        self.band_manager.save_band(band)
+
+        app_logger.info(
+            "[%s] band yeniden adlandırıldı: %s -> %s",
+            self.operator_name,
+            old_name,
+            new_name
+        )
+
+        if self.current_band is not None and self.current_band.id == band_id:
+
+            self.current_band = band
+
+            self.window.setWindowTitle(
+                f"KASA KURULUM - {self.current_band.name}"
+            )
+
+        self.load_bands()
+
+    # -------------------------------------------------
+
+    def delete_band(self):
+
+        page = self.window.band_page
+
+        item = page.band_list.currentItem()
+
+        if item is None:
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Uyarı",
+
+                "Lütfen bir band seçin."
+
+            )
+
+            return
+
+        band_id = item.data(Qt.UserRole)
+        band_name = item.text()
+
+        if self.current_band is not None and self.current_band.id == band_id:
+
+            QMessageBox.warning(
+
+                self.window,
+
+                "Uyarı",
+
+                "Şu an açık olan band silinemez. Önce başka bir "
+                "band açmak için uygulamayı yeniden başlatın."
+
+            )
+
+            return
+
+        answer = QMessageBox.question(
+
+            self.window,
+
+            "Emin misiniz?",
+
+            f"'{band_name}' bandı ve tüm verileri (referans, ROI, "
+            "modeller, inceleme geçmişi) kalıcı olarak silinecek. "
+            "Devam edilsin mi?"
+
+        )
+
+        if answer != QMessageBox.Yes:
+            return
+
+        self.band_manager.delete_band(band_id)
+
+        app_logger.info(
+            "[%s] band silindi: %s",
+            self.operator_name,
+            band_name
         )
 
         self.load_bands()

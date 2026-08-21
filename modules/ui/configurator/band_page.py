@@ -13,9 +13,8 @@ class BandPage(QWidget):
     Günlük kullanımda ihtiyaç duyulan tek şey band seçip açmaktır -
     bu sayfa bilerek sade tutulur. Doğrulama, dışa/içe aktarma,
     operatör/log yönetimi, Telegram ve kamera kanalı/Arduino ayarları
-    gibi seyrek kullanılan işler MainWindow'daki "Yönetim" menüsünden
-    açılan pencerelerde yaşar (bkz. main_window.py, camera_channels_
-    dialog.py, arduino_settings_dialog.py).
+    gibi seyrek kullanılan işler MainWindow'daki "Ayarlar" penceresinde
+    yaşar (bkz. main_window.py, settings_dialog.py).
     """
 
     def __init__(self):
@@ -39,5 +38,11 @@ class BandPage(QWidget):
 
         self.open_button = QPushButton("Bandı Aç")
         button_row.addWidget(self.open_button)
+
+        self.rename_button = QPushButton("Yeniden Adlandır")
+        button_row.addWidget(self.rename_button)
+
+        self.delete_button = QPushButton("Bandı Sil")
+        button_row.addWidget(self.delete_button)
 
         layout.addLayout(button_row)
