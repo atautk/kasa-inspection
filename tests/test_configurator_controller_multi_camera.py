@@ -263,22 +263,69 @@ def test_band_page_stays_minimal(controller):
     assert not hasattr(page, "arduino_port_combo")
 
 
-def test_management_actions_enabled_only_after_band_open(controller):
+def _settings_dialog_category_item(dialog, label):
 
-    window = controller.window
+    for i in range(dialog.category_list.count()):
 
-    # Band henüz açılmadan kamera kanalı/Arduino menü öğeleri
-    # devre dışı olmalı (bir bant seçilmeden anlamsız).
-    assert not window.camera_channels_action.isEnabled()
-    assert not window.arduino_settings_action.isEnabled()
+        item = dialog.category_list.item(i)
+
+        if item.text() == label:
+            return item
+
+    return None
+
+
+def test_settings_dialog_band_categories_disabled_until_band_open(controller):
+
+    from PySide6.QtCore import Qt
+    from modules.ui.configurator.settings_dialog import SettingsDialog
+
+    dialog = SettingsDialog(
+        controller.band_manager,
+        controller.current_band,
+        controller.operator_manager,
+        controller.operator_name,
+        controller.telegram_settings_manager,
+        controller.telegram_recipients_manager,
+        parent=controller.window
+    )
+
+    camera_item = _settings_dialog_category_item(dialog, "Kamera Kanalları")
+    arduino_item = _settings_dialog_category_item(dialog, "Arduino")
+
+    assert not (camera_item.flags() & Qt.ItemIsEnabled)
+    assert not (arduino_item.flags() & Qt.ItemIsEnabled)
+
+    dialog.close()
+
+
+def test_settings_dialog_band_categories_enabled_after_band_open(controller):
+
+    from PySide6.QtCore import Qt
+    from modules.ui.configurator.settings_dialog import SettingsDialog
 
     _open_band(controller)
 
-    assert window.camera_channels_action.isEnabled()
-    assert window.arduino_settings_action.isEnabled()
+    dialog = SettingsDialog(
+        controller.band_manager,
+        controller.current_band,
+        controller.operator_manager,
+        controller.operator_name,
+        controller.telegram_settings_manager,
+        controller.telegram_recipients_manager,
+        parent=controller.window
+    )
+
+    camera_item = _settings_dialog_category_item(dialog, "Kamera Kanalları")
+    arduino_item = _settings_dialog_category_item(dialog, "Arduino")
+
+    assert camera_item.flags() & Qt.ItemIsEnabled
+    assert arduino_item.flags() & Qt.ItemIsEnabled
+
+    dialog.close()
 
 
-def test_open_camera_channels_refreshes_selectors_after_dialog_closes(
+def test_open_settings_refreshes_camera_selectors_after_dialog_closes(
     controller, monkeypatch
 ):
 
@@ -286,20 +333,19 @@ def test_open_camera_channels_refreshes_selectors_after_dialog_closes(
 
     def fake_exec(self):
 
-        # Kullanıcı diyalogda bir kanal ekleyip kapatmış gibi davran.
+        # Kullanıcı Kamera Kanalları panelinde bir kanal ekleyip
+        # pencereyi kapatmış gibi davran.
         controller.band_manager.add_camera_channel(
             band, "Yan", camera_index=1
         )
 
         return 1
 
-    from modules.ui.configurator.camera_channels_dialog import (
-        CameraChannelsDialog
-    )
+    from modules.ui.configurator.settings_dialog import SettingsDialog
 
-    monkeypatch.setattr(CameraChannelsDialog, "exec", fake_exec)
+    monkeypatch.setattr(SettingsDialog, "exec", fake_exec)
 
-    controller.open_camera_channels()
+    controller.open_settings()
 
     assert not controller.window.reference_page.channel_container.isHidden()
     assert not controller.window.roi_page.channel_container.isHidden()

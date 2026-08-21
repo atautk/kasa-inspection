@@ -77,11 +77,16 @@ class MainWindow(QMainWindow):
 
     def _build_management_menu(self):
         """
-        Seyrek kullanılan band-yönetimi işleri (doğrulama, dışa/içe
-        aktarma, operatör/log, Telegram, kamera kanalı/Arduino
-        ayarları) burada birer QAction olarak durur. Davranışları
-        ConfiguratorController.connect_signals() tarafından bağlanır -
-        bu sınıf sadece menüyü kurar, hiçbir iş mantığı bilmez.
+        Seyrek kullanılan band-yönetimi işleri burada birer QAction
+        olarak durur. Davranışları ConfiguratorController.
+        connect_signals() tarafından bağlanır - bu sınıf sadece
+        menüyü kurar, hiçbir iş mantığı bilmez.
+
+        Band'e özel/Telegram/operatör ayarlarının tamamı (eskiden 9
+        ayrı pencereydi) artık tek bir "Ayarlar..." penceresinde -
+        bkz. SettingsDialog. Burada sadece tek seferlik işlemler
+        (Doğrula, Dışa/İçe Aktar) ve salt okunur geçmiş görüntüleyici
+        (Giriş/Çıkış Logu) ayrı madde olarak kalıyor.
         """
 
         management_menu = self.menuBar().addMenu("&Yönetim")
@@ -92,53 +97,13 @@ class MainWindow(QMainWindow):
 
         management_menu.addSeparator()
 
-        self.manage_operators_action = management_menu.addAction(
-            "Operatörleri Yönet..."
-        )
         self.audit_log_action = management_menu.addAction(
             "Giriş/Çıkış ve Değişiklik Logu..."
         )
 
         management_menu.addSeparator()
 
-        self.telegram_settings_action = management_menu.addAction(
-            "Telegram Bildirimleri..."
-        )
-        self.telegram_recipients_action = management_menu.addAction(
-            "Bildirim Alıcıları (Telefon Numarası)..."
-        )
-
-        management_menu.addSeparator()
-
-        self.camera_channels_action = management_menu.addAction(
-            "Kamera Kanallarını Yönet..."
-        )
-        self.camera_channels_action.setEnabled(False)
-
-        self.arduino_settings_action = management_menu.addAction(
-            "Arduino Ayarları..."
-        )
-        self.arduino_settings_action.setEnabled(False)
-
-        self.shift_settings_action = management_menu.addAction(
-            "Vardiya Ayarları..."
-        )
-        self.shift_settings_action.setEnabled(False)
-
-        self.reference_reminder_action = management_menu.addAction(
-            "Referans Yenileme Hatırlatıcısı..."
-        )
-        self.reference_reminder_action.setEnabled(False)
-
-        self.training_data_settings_action = management_menu.addAction(
-            "Model Eğitimi Veri Toplama..."
-        )
-        self.training_data_settings_action.setEnabled(False)
-
-        self.auto_backup_settings_action = management_menu.addAction(
-            "Otomatik Yedekleme..."
-        )
-        self.auto_backup_settings_action.setEnabled(False)
+        self.settings_action = management_menu.addAction("Ayarlar...")
 
     def _open_accessibility_dialog(self):
 

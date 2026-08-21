@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 class ShiftTrackingMixin:
     """
     Vardiya bazlı üretim sayacı: bandın tanımlı vardiya pencereleri
-    varsa (bkz. Band.shifts, ShiftSettingsDialog), şu an içinde
+    varsa (bkz. Band.shifts, ShiftSettingsPanel), şu an içinde
     bulunulan pencereyi bulur ve o pencerenin başlangıcından bu yana
     kaç kasa incelendiğini arayüzde gösterir. Üretim hedefi/tempo
     takibi ve buna bağlı Telegram uyarısı YOK - sadece bir sayaç.

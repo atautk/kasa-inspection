@@ -16,34 +16,8 @@ from modules.configuration.configuration_validator import ConfigurationValidator
 from modules.configuration.band_export_manager import BandExportManager
 from modules.utils.logger import get_logger
 
-from modules.ui.configurator.operator_management_dialog import (
-    OperatorManagementDialog
-)
 from modules.ui.configurator.audit_log_dialog import AuditLogDialog
-from modules.ui.configurator.telegram_settings_dialog import (
-    TelegramSettingsDialog
-)
-from modules.ui.configurator.telegram_recipients_dialog import (
-    TelegramRecipientsDialog
-)
-from modules.ui.configurator.camera_channels_dialog import (
-    CameraChannelsDialog
-)
-from modules.ui.configurator.arduino_settings_dialog import (
-    ArduinoSettingsDialog
-)
-from modules.ui.configurator.shift_settings_dialog import (
-    ShiftSettingsDialog
-)
-from modules.ui.configurator.reference_reminder_dialog import (
-    ReferenceReminderDialog
-)
-from modules.ui.configurator.training_data_settings_dialog import (
-    TrainingDataSettingsDialog
-)
-from modules.ui.configurator.auto_backup_settings_dialog import (
-    AutoBackupSettingsDialog
-)
+from modules.ui.configurator.settings_dialog import SettingsDialog
 from modules.configuration.telegram_settings_manager import (
     TelegramSettingsManager
 )
@@ -161,44 +135,12 @@ class ConfiguratorController:
             self.import_band
         )
 
-        self.window.manage_operators_action.triggered.connect(
-            self.open_operator_management
-        )
-
         self.window.audit_log_action.triggered.connect(
             self.open_audit_log
         )
 
-        self.window.telegram_settings_action.triggered.connect(
-            self.open_telegram_settings
-        )
-
-        self.window.telegram_recipients_action.triggered.connect(
-            self.open_telegram_recipients
-        )
-
-        self.window.camera_channels_action.triggered.connect(
-            self.open_camera_channels
-        )
-
-        self.window.arduino_settings_action.triggered.connect(
-            self.open_arduino_settings
-        )
-
-        self.window.shift_settings_action.triggered.connect(
-            self.open_shift_settings
-        )
-
-        self.window.reference_reminder_action.triggered.connect(
-            self.open_reference_reminder
-        )
-
-        self.window.training_data_settings_action.triggered.connect(
-            self.open_training_data_settings
-        )
-
-        self.window.auto_backup_settings_action.triggered.connect(
-            self.open_auto_backup_settings
+        self.window.settings_action.triggered.connect(
+            self.open_settings
         )
 
         reference_page = self.window.reference_page
@@ -408,13 +350,6 @@ class ConfiguratorController:
         # Models sekmesi şimdilik serbest.
         self.window.tabs.setTabEnabled(3, True)
 
-        self.window.camera_channels_action.setEnabled(True)
-        self.window.arduino_settings_action.setEnabled(True)
-        self.window.shift_settings_action.setEnabled(True)
-        self.window.reference_reminder_action.setEnabled(True)
-        self.window.training_data_settings_action.setEnabled(True)
-        self.window.auto_backup_settings_action.setEnabled(True)
-
         self.load_reference_tab()
 
         QMessageBox.information(
@@ -429,183 +364,28 @@ class ConfiguratorController:
 
     # -------------------------------------------------
 
-    def open_arduino_settings(self):
+    def open_settings(self):
+        """
+        Eskiden 9 ayrı pencere olan band/Telegram/operatör ayarlarının
+        hepsi artık tek bir SettingsDialog'da (soldan kategori seçimi)
+        gösteriliyor. Her panel kendi değişikliğini kendi kaydediyor -
+        burada sadece pencereyi kurup açıyoruz, kapandıktan sonra
+        kamera kanalı seçim kutularını her ihtimale karşı tazeliyoruz.
+        """
 
-        if self.current_band is None:
-            return
-
-        dialog = ArduinoSettingsDialog(
-            self.current_band.arduino_port,
-            self.window
-        )
-
-        if dialog.exec() != ArduinoSettingsDialog.Accepted:
-            return
-
-        self.current_band.arduino_port = dialog.get_port()
-
-        self.band_manager.save_band(self.current_band)
-
-        app_logger.info(
-            "[%s] arduino portu değiştirildi: %s -> '%s'",
-            self.operator_name,
-            self.current_band.name,
-            self.current_band.arduino_port
-        )
-
-    # -------------------------------------------------
-    # Vardiya Ayarları
-    # -------------------------------------------------
-
-    def open_shift_settings(self):
-
-        if self.current_band is None:
-            return
-
-        before = {shift.id for shift in self.current_band.shifts}
-
-        dialog = ShiftSettingsDialog(
+        dialog = SettingsDialog(
             self.band_manager,
             self.current_band,
-            operator_manager=self.operator_manager,
+            self.operator_manager,
+            self.operator_name,
+            self.telegram_settings_manager,
+            self.telegram_recipients_manager,
+            on_channels_changed=self._refresh_camera_selectors,
             parent=self.window
         )
 
         dialog.exec()
 
-        after = {shift.id for shift in self.current_band.shifts}
-
-        if before != after:
-
-            app_logger.info(
-                "[%s] vardiya pencereleri güncellendi: %s (%d pencere)",
-                self.operator_name,
-                self.current_band.name,
-                len(self.current_band.shifts)
-            )
-
-    # -------------------------------------------------
-    # Referans Yenileme Hatırlatıcısı
-    # -------------------------------------------------
-
-    def open_reference_reminder(self):
-
-        if self.current_band is None:
-            return
-
-        dialog = ReferenceReminderDialog(self.current_band, self.window)
-
-        if dialog.exec() != ReferenceReminderDialog.Accepted:
-            return
-
-        self.current_band.reference_max_age_days = (
-            dialog.get_max_age_days()
-        )
-
-        self.band_manager.save_band(self.current_band)
-
-        app_logger.info(
-            "[%s] referans yenileme hatırlatıcısı değiştirildi: %s -> "
-            "%d gün",
-            self.operator_name,
-            self.current_band.name,
-            self.current_band.reference_max_age_days
-        )
-
-    # -------------------------------------------------
-    # Model Eğitimi Veri Toplama
-    # -------------------------------------------------
-
-    def open_training_data_settings(self):
-
-        if self.current_band is None:
-            return
-
-        dialog = TrainingDataSettingsDialog(self.current_band, self.window)
-
-        if dialog.exec() != TrainingDataSettingsDialog.Accepted:
-            return
-
-        self.current_band.training_data_collection_enabled = (
-            dialog.is_enabled()
-        )
-
-        self.band_manager.save_band(self.current_band)
-
-        app_logger.info(
-            "[%s] model eğitimi veri toplama değiştirildi: %s -> %s",
-            self.operator_name,
-            self.current_band.name,
-            self.current_band.training_data_collection_enabled
-        )
-
-    # -------------------------------------------------
-    # Otomatik Yedekleme
-    # -------------------------------------------------
-
-    def open_auto_backup_settings(self):
-
-        if self.current_band is None:
-            return
-
-        dialog = AutoBackupSettingsDialog(self.current_band, self.window)
-
-        if dialog.exec() != AutoBackupSettingsDialog.Accepted:
-            return
-
-        self.current_band.auto_backup_enabled = dialog.is_enabled()
-        self.current_band.auto_backup_destination = dialog.get_destination()
-        self.current_band.auto_backup_interval_hours = (
-            dialog.get_interval_hours()
-        )
-        self.current_band.auto_backup_keep_count = dialog.get_keep_count()
-
-        self.band_manager.save_band(self.current_band)
-
-        app_logger.info(
-            "[%s] otomatik yedekleme ayarları değiştirildi: %s -> "
-            "açık=%s, hedef=%s, sıklık=%.1f saat, sakla=%d",
-            self.operator_name,
-            self.current_band.name,
-            self.current_band.auto_backup_enabled,
-            self.current_band.auto_backup_destination,
-            self.current_band.auto_backup_interval_hours,
-            self.current_band.auto_backup_keep_count
-        )
-
-    # -------------------------------------------------
-    # Kamera Kanalları (Çoklu Açı)
-    # -------------------------------------------------
-
-    def open_camera_channels(self):
-
-        if self.current_band is None:
-            return
-
-        before = {channel.id for channel in self.current_band.cameras}
-
-        dialog = CameraChannelsDialog(
-            self.band_manager,
-            self.current_band,
-            self.window
-        )
-
-        dialog.exec()
-
-        after = {channel.id for channel in self.current_band.cameras}
-
-        if before != after:
-
-            app_logger.info(
-                "[%s] kamera kanalları güncellendi: %s (%d kanal)",
-                self.operator_name,
-                self.current_band.name,
-                len(self.current_band.cameras)
-            )
-
-        # Reference/ROI sekmelerindeki kanal seçim kutuları, band
-        # kapanmadan önceki kanal listesini gösteriyor olabilir -
-        # pencere kapandığında her durumda tazeleriz.
         self._refresh_camera_selectors()
 
     # -------------------------------------------------
@@ -760,32 +540,6 @@ class ConfiguratorController:
         )
 
     # -------------------------------------------------
-    # Operatör Yönetimi
-    # -------------------------------------------------
-
-    def open_operator_management(self):
-
-        if self.operator_manager is None:
-            return
-
-        if not self.operator_manager.is_admin(self.operator_name):
-
-            QMessageBox.warning(
-                self.window,
-                "Yetkisiz",
-                "Bu işlem için yönetici yetkisi gereklidir."
-            )
-
-            return
-
-        dialog = OperatorManagementDialog(
-            self.operator_manager,
-            self.window
-        )
-
-        dialog.exec()
-
-    # -------------------------------------------------
 
     def open_audit_log(self):
 
@@ -803,55 +557,6 @@ class ConfiguratorController:
             return
 
         dialog = AuditLogDialog(LOG_FILE, self.window)
-
-        dialog.exec()
-
-    # -------------------------------------------------
-
-    def open_telegram_settings(self):
-
-        if self.operator_manager is None:
-            return
-
-        if not self.operator_manager.is_admin(self.operator_name):
-
-            QMessageBox.warning(
-                self.window,
-                "Yetkisiz",
-                "Bu işlem için yönetici yetkisi gereklidir."
-            )
-
-            return
-
-        dialog = TelegramSettingsDialog(
-            self.telegram_settings_manager,
-            self.window
-        )
-
-        dialog.exec()
-
-    # -------------------------------------------------
-
-    def open_telegram_recipients(self):
-
-        if self.operator_manager is None:
-            return
-
-        if not self.operator_manager.is_admin(self.operator_name):
-
-            QMessageBox.warning(
-                self.window,
-                "Yetkisiz",
-                "Bu işlem için yönetici yetkisi gereklidir."
-            )
-
-            return
-
-        dialog = TelegramRecipientsDialog(
-            self.telegram_settings_manager,
-            self.telegram_recipients_manager,
-            self.window
-        )
 
         dialog.exec()
 

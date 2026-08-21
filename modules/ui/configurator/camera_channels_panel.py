@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -11,31 +11,29 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt
 
-from ..window_utils import restore_or_center, save_geometry
 
-SETTINGS_KEY = "camera_channels_dialog"
-
-
-class CameraChannelsDialog(QDialog):
+class CameraChannelsPanel(QWidget):
     """
     Bir bandın ek kamera kanallarını (aynı kasayı farklı açılardan
-    izleyen kameralar) ekleme/silme penceresi. Reference/ROI
-    sekmelerindeki kanal seçim kutuları, bu pencere kapandığında
-    yeniden okunmalıdır - bkz. ConfiguratorController.open_camera_channels.
+    izleyen kameralar) ekleme/silme paneli. Reference/ROI
+    sekmelerindeki kanal seçim kutuları değiştikten sonra yeniden
+    okunmalıdır - bkz. on_channels_changed. Ayarlar penceresi içine
+    gömülür - bkz. SettingsDialog.
     """
 
-    def __init__(self, band_manager, band, parent=None):
+    def __init__(self, band_manager, band, on_channels_changed=None, parent=None):
 
         super().__init__(parent)
 
         self.band_manager = band_manager
         self.band = band
-
-        self.setWindowTitle(f"Kamera Kanalları - {band.name}")
-        self.setModal(True)
-        restore_or_center(self, SETTINGS_KEY, 480, 400)
+        self.on_channels_changed = on_channels_changed
 
         layout = QVBoxLayout(self)
+
+        title = QLabel("Kamera Kanalları")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         info_label = QLabel(
             "Aynı kasayı farklı açılardan izlemek için ek kamera "
@@ -62,27 +60,23 @@ class CameraChannelsDialog(QDialog):
 
         button_row.addStretch()
 
-        self.close_button = QPushButton("&Kapat")
-        self.close_button.clicked.connect(self.accept)
-        button_row.addWidget(self.close_button)
-
         layout.addLayout(button_row)
 
+        self.set_band(band)
+
+    # -------------------------------------------------
+
+    def set_band(self, band):
+
+        self.band = band
         self._reload_list()
-
-    # -------------------------------------------------
-
-    def closeEvent(self, event):
-
-        save_geometry(self, SETTINGS_KEY)
-
-        super().closeEvent(event)
-
-    # -------------------------------------------------
 
     def _reload_list(self):
 
         self.channel_list.clear()
+
+        if self.band is None:
+            return
 
         for channel in self.band.cameras:
 
@@ -97,6 +91,9 @@ class CameraChannelsDialog(QDialog):
     # -------------------------------------------------
 
     def _on_add_clicked(self):
+
+        if self.band is None:
+            return
 
         name, ok = QInputDialog.getText(
             self,
@@ -127,6 +124,9 @@ class CameraChannelsDialog(QDialog):
         self.band_manager.add_camera_channel(self.band, name, camera_index)
 
         self._reload_list()
+
+        if self.on_channels_changed is not None:
+            self.on_channels_changed()
 
     # -------------------------------------------------
 
@@ -160,3 +160,6 @@ class CameraChannelsDialog(QDialog):
         )
 
         self._reload_list()
+
+        if self.on_channels_changed is not None:
+            self.on_channels_changed()

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -11,16 +11,13 @@ from PySide6.QtWidgets import (
 
 from modules.core.telegram_notifier import TelegramNotifier
 
-from ..window_utils import restore_or_center, save_geometry
 
-SETTINGS_KEY = "telegram_settings_dialog"
-
-
-class TelegramSettingsDialog(QDialog):
+class TelegramSettingsPanel(QWidget):
     """
     Telegram bot token / chat id ve hangi olaylarda bildirim
     gönderileceği burada ayarlanır. "Test Et" ile kayıtlı ayarlarla
     gerçek bir mesaj gönderilip kurulumun çalıştığı doğrulanabilir.
+    Ayarlar penceresi içine gömülür - bkz. SettingsDialog.
     """
 
     def __init__(self, settings_manager, parent=None):
@@ -29,11 +26,11 @@ class TelegramSettingsDialog(QDialog):
 
         self.settings_manager = settings_manager
 
-        self.setWindowTitle("Telegram Bildirimleri")
-        self.setModal(True)
-        restore_or_center(self, SETTINGS_KEY, 480, 320)
-
         layout = QVBoxLayout(self)
+
+        title = QLabel("Telegram Bildirimleri")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         info_label = QLabel(
             "Bot token'ı almak için Telegram'da @BotFather ile "
@@ -102,21 +99,13 @@ class TelegramSettingsDialog(QDialog):
         self.save_button.clicked.connect(self._on_save_clicked)
         button_row.addWidget(self.save_button)
 
-        self.close_button = QPushButton("&Kapat")
-        self.close_button.clicked.connect(self.reject)
-        button_row.addWidget(self.close_button)
+        button_row.addStretch()
 
         layout.addLayout(button_row)
 
+        layout.addStretch()
+
         self._load_current_settings()
-
-    # -------------------------------------------------
-
-    def closeEvent(self, event):
-
-        save_geometry(self, SETTINGS_KEY)
-
-        super().closeEvent(event)
 
     # -------------------------------------------------
 
@@ -207,5 +196,3 @@ class TelegramSettingsDialog(QDialog):
         settings.confirm_emoji = emoji or "✅"
 
         self.settings_manager.save(settings)
-
-        self.accept()

@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -14,10 +14,6 @@ from PySide6.QtCore import Qt, Signal
 from modules.core.telegram_notifier import TelegramNotifier
 from modules.core.telegram_reaction_poller import TelegramReactionPoller
 
-from ..window_utils import restore_or_center, save_geometry
-
-SETTINGS_KEY = "telegram_recipients_dialog"
-
 PAIRING_PROMPT = (
     "Kasa İnceleme bildirimlerine kaydolmak için aşağıdaki "
     "\"Numaramı Paylaş\" butonuna basın."
@@ -29,15 +25,21 @@ PAIRING_CONFIRMATION = (
 )
 
 
-class TelegramRecipientsDialog(QDialog):
+class TelegramRecipientsPanel(QWidget):
     """
     Telefon numarası ile Telegram bildirim alıcısı ekleme/yönetme
-    penceresi.
+    paneli. Ayarlar penceresi içine gömülür - bkz. SettingsDialog.
 
     "Eşleştirme Modu" açıkken bota mesaj atan herkese otomatik olarak
     "Numaramı Paylaş" butonu gönderilir; kişi butona basınca telefon
     numarası + chat id otomatik kaydedilir ve tabloya düşer. Yönetici
     her kayıt için bildirim alıp almayacağını (Aktif) seçer.
+
+    ÖNEMLİ: eşleştirme modu bir arka plan thread'i (TelegramReactionPoller)
+    başlatır. Bu panel artık kendi pencere yaşam döngüsüne (closeEvent/
+    reject) sahip olmadığından, çağıran taraf panel gizlendiğinde/
+    Ayarlar penceresi kapandığında mutlaka cleanup() çağırmalı - aksi
+    halde thread çalışmaya devam eder.
     """
 
     _contact_received = Signal(str, str, str)
@@ -50,11 +52,11 @@ class TelegramRecipientsDialog(QDialog):
         self.recipients_manager = recipients_manager
         self.poller = None
 
-        self.setWindowTitle("Bildirim Alıcıları (Telefon Numarası)")
-        self.setModal(True)
-        restore_or_center(self, SETTINGS_KEY, 560, 420)
-
         layout = QVBoxLayout(self)
+
+        title = QLabel("Bildirim Alıcıları (Telefon Numarası)")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         info_label = QLabel(
             "Telegram bir telefon numarasına doğrudan mesaj gönderemez; "
@@ -93,10 +95,6 @@ class TelegramRecipientsDialog(QDialog):
 
         button_row.addStretch()
 
-        self.close_button = QPushButton("&Kapat")
-        self.close_button.clicked.connect(self.reject)
-        button_row.addWidget(self.close_button)
-
         layout.addLayout(button_row)
 
         self._contact_received.connect(self._on_contact_received_main_thread)
@@ -105,19 +103,13 @@ class TelegramRecipientsDialog(QDialog):
 
     # -------------------------------------------------
 
-    def closeEvent(self, event):
+    def cleanup(self):
+        """
+        Panel gizlenirken/Ayarlar penceresi kapanırken çağrılmalı -
+        eşleştirme modu açıksa arka plan thread'ini durdurur.
+        """
 
         self._stop_pairing()
-
-        save_geometry(self, SETTINGS_KEY)
-
-        super().closeEvent(event)
-
-    def reject(self):
-
-        self._stop_pairing()
-
-        super().reject()
 
     # -------------------------------------------------
     # Tablo
@@ -211,7 +203,7 @@ class TelegramRecipientsDialog(QDialog):
             QMessageBox.warning(
                 self,
                 "Uyarı",
-                "Önce Telegram Bildirimleri penceresinden Bot Token girin."
+                "Önce Telegram Bildirimleri panelinden Bot Token girin."
             )
 
             self.pairing_button.setChecked(False)

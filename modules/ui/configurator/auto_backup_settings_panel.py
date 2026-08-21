@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -12,29 +12,34 @@ from PySide6.QtWidgets import (
     QMessageBox
 )
 
-from ..window_utils import restore_or_center, save_geometry
+from modules.utils.logger import get_logger
 
-SETTINGS_KEY = "auto_backup_settings_dialog"
+app_logger = get_logger()
 
 
-class AutoBackupSettingsDialog(QDialog):
+class AutoBackupSettingsPanel(QWidget):
     """
     Bir bandın otomatik yedekleme ayarını (açık/kapalı, hedef klasör,
-    sıklık, saklanacak yedek sayısı) değiştirme penceresi. Açıksa,
+    sıklık, saklanacak yedek sayısı) değiştirme paneli. Açıksa,
     inspection_log.db + ng_captures/ periyodik olarak hedef klasöre
     kopyalanır ve eski yedekler otomatik temizlenir - bkz.
     BackupManager, InspectionUIController._maybe_run_auto_backup.
+    Ayarlar penceresi içine gömülür - bkz. SettingsDialog.
     """
 
-    def __init__(self, band, parent=None):
+    def __init__(self, band_manager, band, operator_name, parent=None):
 
         super().__init__(parent)
 
-        self.setWindowTitle(f"Otomatik Yedekleme - {band.name}")
-        self.setModal(True)
-        restore_or_center(self, SETTINGS_KEY, 480, 240)
+        self.band_manager = band_manager
+        self.band = band
+        self.operator_name = operator_name
 
         layout = QVBoxLayout(self)
+
+        title = QLabel("Otomatik Yedekleme")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         info_label = QLabel(
             "Açıksa, inceleme geçmişi (SQLite log + hata fotoğrafları) "
@@ -48,14 +53,12 @@ class AutoBackupSettingsDialog(QDialog):
         layout.addWidget(info_label)
 
         self.enabled_checkbox = QCheckBox("Otomatik yedeklemeyi aç")
-        self.enabled_checkbox.setChecked(band.auto_backup_enabled)
         layout.addWidget(self.enabled_checkbox)
 
         destination_row = QHBoxLayout()
         destination_row.addWidget(QLabel("Hedef Klasör:"))
 
         self.destination_input = QLineEdit()
-        self.destination_input.setText(band.auto_backup_destination)
         destination_row.addWidget(self.destination_input, stretch=1)
 
         self.browse_button = QPushButton("Gözat...")
@@ -70,7 +73,6 @@ class AutoBackupSettingsDialog(QDialog):
         self.interval_spinbox = QDoubleSpinBox()
         self.interval_spinbox.setRange(1.0, 720.0)
         self.interval_spinbox.setSingleStep(1.0)
-        self.interval_spinbox.setValue(band.auto_backup_interval_hours)
         interval_row.addWidget(self.interval_spinbox, stretch=1)
 
         layout.addLayout(interval_row)
@@ -80,32 +82,36 @@ class AutoBackupSettingsDialog(QDialog):
 
         self.keep_count_spinbox = QSpinBox()
         self.keep_count_spinbox.setRange(0, 1000)
-        self.keep_count_spinbox.setValue(band.auto_backup_keep_count)
         keep_row.addWidget(self.keep_count_spinbox, stretch=1)
 
         layout.addLayout(keep_row)
 
-        button_row = QHBoxLayout()
-
-        button_row.addStretch()
-
-        self.cancel_button = QPushButton("İptal")
-        self.cancel_button.clicked.connect(self.reject)
-        button_row.addWidget(self.cancel_button)
-
         self.save_button = QPushButton("&Kaydet")
         self.save_button.clicked.connect(self._on_save_clicked)
-        button_row.addWidget(self.save_button)
+        layout.addWidget(self.save_button)
 
-        layout.addLayout(button_row)
+        layout.addStretch()
+
+        self.set_band(band)
 
     # -------------------------------------------------
 
-    def closeEvent(self, event):
+    def set_band(self, band):
 
-        save_geometry(self, SETTINGS_KEY)
+        self.band = band
 
-        super().closeEvent(event)
+        self.enabled_checkbox.setChecked(
+            band.auto_backup_enabled if band is not None else False
+        )
+        self.destination_input.setText(
+            band.auto_backup_destination if band is not None else ""
+        )
+        self.interval_spinbox.setValue(
+            band.auto_backup_interval_hours if band is not None else 24.0
+        )
+        self.keep_count_spinbox.setValue(
+            band.auto_backup_keep_count if band is not None else 30
+        )
 
     # -------------------------------------------------
 
@@ -122,6 +128,9 @@ class AutoBackupSettingsDialog(QDialog):
 
     def _on_save_clicked(self):
 
+        if self.band is None:
+            return
+
         if self.enabled_checkbox.isChecked() and not (
             self.destination_input.text().strip()
         ):
@@ -134,22 +143,21 @@ class AutoBackupSettingsDialog(QDialog):
 
             return
 
-        self.accept()
+        self.band.auto_backup_enabled = self.enabled_checkbox.isChecked()
+        self.band.auto_backup_destination = (
+            self.destination_input.text().strip()
+        )
+        self.band.auto_backup_interval_hours = self.interval_spinbox.value()
+        self.band.auto_backup_keep_count = self.keep_count_spinbox.value()
 
-    # -------------------------------------------------
+        self.band_manager.save_band(self.band)
 
-    def is_enabled(self) -> bool:
-
-        return self.enabled_checkbox.isChecked()
-
-    def get_destination(self) -> str:
-
-        return self.destination_input.text().strip()
-
-    def get_interval_hours(self) -> float:
-
-        return self.interval_spinbox.value()
-
-    def get_keep_count(self) -> int:
-
-        return self.keep_count_spinbox.value()
+        app_logger.info(
+            "[%s] otomatik yedekleme ayarları değiştirildi: %s -> "
+            "açık=%s, hedef=%s, sıklık=%.1f saat, sakla=%d",
+            self.operator_name, self.band.name,
+            self.band.auto_backup_enabled,
+            self.band.auto_backup_destination,
+            self.band.auto_backup_interval_hours,
+            self.band.auto_backup_keep_count
+        )

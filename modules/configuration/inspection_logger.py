@@ -481,7 +481,7 @@ class InspectionLogger:
     # -------------------------------------------------
     #
     # Bandın tanımlı vardiya pencereleri (bkz. Band.shifts,
-    # ShiftSettingsDialog) sabit saat aralıklarıdır (ör. "Sabah"
+    # ShiftSettingsPanel) sabit saat aralıklarıdır (ör. "Sabah"
     # 07:30-15:30). Geçmiş vardiyaların ne zaman başladığı ayrıca
     # saklanmaz - her kaydın yerel saati, tanımlı pencerelerden
     # hangisine düşüyorsa ona göre HESAPLANIR. Hiçbir pencereye

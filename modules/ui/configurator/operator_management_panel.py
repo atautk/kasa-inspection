@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QLabel,
     QTableWidget,
     QTableWidgetItem,
     QHeaderView,
@@ -9,17 +10,13 @@ from PySide6.QtWidgets import (
     QMessageBox
 )
 
-from ..window_utils import restore_or_center, save_geometry
 
-SETTINGS_KEY = "operator_management_dialog"
-
-
-class OperatorManagementDialog(QDialog):
+class OperatorManagementPanel(QWidget):
     """
     Operatörleri listeler; onay bekleyen operatörleri onaylama ve
-    operatör silme burada yapılır. Bu pencereyi kimin açabileceği
+    operatör silme burada yapılır. Bu paneli kimin görebileceği
     (yönetici kontrolü) çağıran taraftan (ConfiguratorController)
-    yapılır.
+    yapılır. Ayarlar penceresi içine gömülür - bkz. SettingsDialog.
     """
 
     COLUMNS = ["Ad", "Rol", "Durum"]
@@ -30,10 +27,11 @@ class OperatorManagementDialog(QDialog):
 
         self.operator_manager = operator_manager
 
-        self.setWindowTitle("Operatörleri Yönet")
-        restore_or_center(self, SETTINGS_KEY, 480, 360)
-
         layout = QVBoxLayout(self)
+
+        title = QLabel("Operatörleri Yönet")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         self.table = QTableWidget()
         self.table.setColumnCount(len(self.COLUMNS))
@@ -59,21 +57,9 @@ class OperatorManagementDialog(QDialog):
 
         button_row.addStretch()
 
-        self.close_button = QPushButton("Kapat")
-        self.close_button.clicked.connect(self.close)
-        button_row.addWidget(self.close_button)
-
         layout.addLayout(button_row)
 
         self.reload()
-
-    # -------------------------------------------------
-
-    def closeEvent(self, event):
-
-        save_geometry(self, SETTINGS_KEY)
-
-        super().closeEvent(event)
 
     # -------------------------------------------------
     # Liste

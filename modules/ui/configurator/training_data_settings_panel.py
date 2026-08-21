@@ -1,5 +1,5 @@
 from PySide6.QtWidgets import (
-    QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -11,35 +11,38 @@ from PySide6.QtWidgets import (
 )
 
 from modules.configuration.training_data_manager import TrainingDataManager
+from modules.utils.display_terms import state_label
+from modules.utils.logger import get_logger
 
-from ..window_utils import restore_or_center, save_geometry
-
-SETTINGS_KEY = "training_data_settings_dialog"
+app_logger = get_logger()
 
 
-class TrainingDataSettingsDialog(QDialog):
+class TrainingDataSettingsPanel(QWidget):
     """
     Bir bandın model eğitimi veri toplama ayarını (açık/kapalı)
     değiştirme ve o ana kadar ne kadar veri biriktiğini gösteren
-    pencere. Açıksa, her onaylı log olayında ROI bazında referans/
+    panel. Açıksa, her onaylı log olayında göz bazında referans/
     canlı kırpma görüntü çiftleri "training_data/" altında DOLU/BOŞ
-    klasörlenerek diske kaydedilir - bkz. TrainingDataManager.
+    klasörlenerek diske kaydedilir - bkz. TrainingDataManager. Ayarlar
+    penceresi içine gömülür - bkz. SettingsDialog.
     """
 
     TABLE_COLUMNS = ["Göz", "Durum", "Örnek Sayısı", "Gözden Geçirilmeli", "Yeterlilik"]
 
-    def __init__(self, band, parent=None):
+    def __init__(self, band_manager, band, operator_name, parent=None):
 
         super().__init__(parent)
 
+        self.band_manager = band_manager
         self.band = band
+        self.operator_name = operator_name
         self.training_data_manager = TrainingDataManager()
 
-        self.setWindowTitle(f"Model Eğitimi Veri Toplama - {band.name}")
-        self.setModal(True)
-        restore_or_center(self, SETTINGS_KEY, 620, 460)
-
         layout = QVBoxLayout(self)
+
+        title = QLabel("Model Eğitimi Veri Toplama")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         info_label = QLabel(
             "Açıksa, her onaylı inceleme sonucunda gözlerin referans/"
@@ -55,9 +58,7 @@ class TrainingDataSettingsDialog(QDialog):
         self.enabled_checkbox = QCheckBox(
             "Bu bant için eğitim verisi topla"
         )
-        self.enabled_checkbox.setChecked(
-            band.training_data_collection_enabled
-        )
+        self.enabled_checkbox.stateChanged.connect(self._on_toggled)
         layout.addWidget(self.enabled_checkbox)
 
         # ---------- Toplanan Veri Özeti ----------
@@ -96,43 +97,52 @@ class TrainingDataSettingsDialog(QDialog):
         self.summary_table.setEditTriggers(QTableWidget.NoEditTriggers)
         layout.addWidget(self.summary_table, stretch=1)
 
-        # ---------- Butonlar ----------
+        self._loading = False
 
-        button_row = QHBoxLayout()
+        self.set_band(band)
 
-        button_row.addStretch()
+    # -------------------------------------------------
 
-        self.cancel_button = QPushButton("İptal")
-        self.cancel_button.clicked.connect(self.reject)
-        button_row.addWidget(self.cancel_button)
+    def set_band(self, band):
 
-        self.save_button = QPushButton("&Kaydet")
-        self.save_button.clicked.connect(self.accept)
-        button_row.addWidget(self.save_button)
+        self.band = band
 
-        layout.addLayout(button_row)
+        self._loading = True
+        self.enabled_checkbox.setChecked(
+            band.training_data_collection_enabled if band is not None else False
+        )
+        self._loading = False
 
         self._reload_summary()
 
-    # -------------------------------------------------
+    def _on_toggled(self):
 
-    def closeEvent(self, event):
+        if self._loading or self.band is None:
+            return
 
-        save_geometry(self, SETTINGS_KEY)
+        self.band.training_data_collection_enabled = (
+            self.enabled_checkbox.isChecked()
+        )
 
-        super().closeEvent(event)
+        self.band_manager.save_band(self.band)
 
-    # -------------------------------------------------
-
-    def is_enabled(self) -> bool:
-
-        return self.enabled_checkbox.isChecked()
+        app_logger.info(
+            "[%s] model eğitimi veri toplama %s: %s",
+            self.operator_name,
+            "açıldı" if self.band.training_data_collection_enabled else "kapatıldı",
+            self.band.name
+        )
 
     # -------------------------------------------------
     # Toplanan Veri Özeti
     # -------------------------------------------------
 
     def _reload_summary(self):
+
+        if self.band is None:
+            self._fill_table([])
+            self.summary_label.setText("-")
+            return
 
         summary = self.training_data_manager.compute_summary(self.band)
 
@@ -159,7 +169,7 @@ class TrainingDataSettingsDialog(QDialog):
 
                 rows.append((
                     roi_name,
-                    state,
+                    state_label(state),
                     data["count"],
                     data["flagged"],
                     self.training_data_manager.assess_sufficiency(

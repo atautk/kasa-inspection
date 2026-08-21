@@ -1,5 +1,6 @@
 from PySide6.QtWidgets import (
     QDialog,
+    QWidget,
     QVBoxLayout,
     QHBoxLayout,
     QLabel,
@@ -13,23 +14,20 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, QTime
 
-from ..window_utils import restore_or_center, save_geometry
-
-SETTINGS_KEY = "shift_settings_dialog"
-
 UNASSIGNED_LABEL = "(Atanmamış)"
 
 
-class ShiftSettingsDialog(QDialog):
+class ShiftSettingsPanel(QWidget):
     """
     Bir bandın vardiya pencerelerini (sabit saat aralıkları, ör.
     "Sabah" 07:30-15:30, isteğe bağlı bir operatör ataması ile)
-    ekleme/düzenleme/silme penceresi. Üretim hedefi/tempo takibi YOK
-    - sadece pencere içindeki üretim sayısı gösterilir (bkz.
-    ShiftTrackingMixin) ve istatistiklerdeki vardiya bazlı NG trendi
-    bu pencerelere göre gruplanır (bkz.
+    ekleme/düzenleme/silme paneli. Üretim hedefi/tempo takibi YOK -
+    sadece pencere içindeki üretim sayısı gösterilir (bkz.
+    ShiftTrackingMixin) ve istatistiklerdeki vardiya bazlı hata
+    trendi bu pencerelere göre gruplanır (bkz.
     InspectionLogger.compute_shift_trend). Hiç pencere yoksa vardiya
-    takibi tamamen kapalıdır.
+    takibi tamamen kapalıdır. Ayarlar penceresi içine gömülür - bkz.
+    SettingsDialog.
     """
 
     def __init__(self, band_manager, band, operator_manager=None, parent=None):
@@ -40,11 +38,11 @@ class ShiftSettingsDialog(QDialog):
         self.band = band
         self.operator_manager = operator_manager
 
-        self.setWindowTitle(f"Vardiya Ayarları - {band.name}")
-        self.setModal(True)
-        restore_or_center(self, SETTINGS_KEY, 480, 400)
-
         layout = QVBoxLayout(self)
+
+        title = QLabel("Vardiya Ayarları")
+        title.setStyleSheet("font-weight: bold; font-size: 14px;")
+        layout.addWidget(title)
 
         info_label = QLabel(
             "Vardiya pencereleri tanımlayın (ör. \"Sabah\" 07:30-15:30) "
@@ -75,25 +73,23 @@ class ShiftSettingsDialog(QDialog):
 
         button_row.addStretch()
 
-        self.close_button = QPushButton("&Kapat")
-        self.close_button.clicked.connect(self.accept)
-        button_row.addWidget(self.close_button)
-
         layout.addLayout(button_row)
 
+        self.set_band(band)
+
+    # -------------------------------------------------
+
+    def set_band(self, band):
+
+        self.band = band
         self._reload_list()
-
-    # -------------------------------------------------
-
-    def closeEvent(self, event):
-        save_geometry(self, SETTINGS_KEY)
-        super().closeEvent(event)
-
-    # -------------------------------------------------
 
     def _reload_list(self):
 
         self.shift_list.clear()
+
+        if self.band is None:
+            return
 
         for shift in self.band.shifts:
 
@@ -116,6 +112,9 @@ class ShiftSettingsDialog(QDialog):
         return self.operator_manager.list_operators()
 
     def _on_add_clicked(self):
+
+        if self.band is None:
+            return
 
         dialog = ShiftWindowEditDialog(
             self, operator_names=self._operator_names()
