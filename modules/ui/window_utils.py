@@ -66,10 +66,46 @@ def restore_or_center(
     if geometry is not None:
 
         window.restoreGeometry(geometry)
+        _clamp_to_screen(window)
 
     else:
 
         size_and_center(window, default_width, default_height)
+
+
+def _clamp_to_screen(window):
+    """
+    Kaydedilmiş geometri farklı bir ekran/çözünürlükte (ör. artık
+    bağlı olmayan ikinci bir monitör, daha büyük bir ekran) alınmış
+    olabilir - bu durumda restoreGeometry() sonrası pencere mevcut
+    ekrandan taşabilir ya da tamamen görünmez alanda kalabilir.
+    Geri yüklenen geometri her zaman mevcut ekranın kullanılabilir
+    alanına sığdırılır.
+    """
+
+    screen = window.screen() or QGuiApplication.primaryScreen()
+
+    if screen is None:
+        return
+
+    available = screen.availableGeometry()
+
+    width = min(window.width(), available.width())
+    height = min(window.height(), available.height())
+
+    if (width, height) != (window.width(), window.height()):
+        window.resize(width, height)
+
+    geo = window.frameGeometry()
+
+    max_x = available.x() + available.width() - geo.width()
+    max_y = available.y() + available.height() - geo.height()
+
+    x = min(max(geo.x(), available.x()), max_x)
+    y = min(max(geo.y(), available.y()), max_y)
+
+    if (x, y) != (geo.x(), geo.y()):
+        window.move(x, y)
 
 
 def save_geometry(window, key: str):
