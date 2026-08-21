@@ -22,6 +22,7 @@ from .shift_settings_panel import ShiftSettingsPanel
 from .reference_reminder_panel import ReferenceReminderPanel
 from .training_data_settings_panel import TrainingDataSettingsPanel
 from .auto_backup_settings_panel import AutoBackupSettingsPanel
+from .data_retention_settings_panel import DataRetentionSettingsPanel
 
 SETTINGS_KEY = "settings_dialog"
 
@@ -42,7 +43,8 @@ class SettingsDialog(QDialog):
     Operatör/Telegram kategorileri yönetici yetkisi ister (tıklanınca
     kontrol edilir); band'e özel kategoriler (Kamera Kanalları,
     Arduino, Vardiya, Referans Hatırlatıcı, Model Eğitimi, Otomatik
-    Yedekleme) hiç band açılmamışsa listede devre dışı görünür.
+    Yedekleme, Veri Saklama) hiç band açılmamışsa listede devre dışı
+    görünür.
     """
 
     def __init__(
@@ -75,8 +77,9 @@ class SettingsDialog(QDialog):
             band_hint_label = QLabel(
                 "Band'e özel ayarlar (Kamera Kanalları, Arduino, "
                 "Vardiya, Referans Hatırlatıcı, Model Eğitimi, "
-                "Otomatik Yedekleme) soldaki listede soluk görünür - "
-                "kullanmak için önce ana ekrandan bir band açın."
+                "Otomatik Yedekleme, Veri Saklama) soldaki listede "
+                "soluk görünür - kullanmak için önce ana ekrandan "
+                "bir band açın."
             )
             band_hint_label.setWordWrap(True)
             band_hint_label.setStyleSheet("color: gray; font-style: italic;")
@@ -247,6 +250,14 @@ class SettingsDialog(QDialog):
         self._add_category(
             "Otomatik Yedekleme",
             AutoBackupSettingsPanel(
+                self.band_manager, self.band, self.operator_name
+            ),
+            band_required=True
+        )
+
+        self._add_category(
+            "Veri Saklama",
+            DataRetentionSettingsPanel(
                 self.band_manager, self.band, self.operator_name
             ),
             band_required=True

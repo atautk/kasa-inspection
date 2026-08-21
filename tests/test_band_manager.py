@@ -315,6 +315,53 @@ def test_load_band_without_auto_backup_fields_defaults(manager):
     assert reloaded.auto_backup_keep_count == 30
 
 
+def test_new_band_has_data_retention_disabled_by_default(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    assert band.data_retention_enabled is False
+    assert band.data_retention_period_value == 1
+    assert band.data_retention_period_unit == "year"
+    assert band.data_retention_export_destination == ""
+    assert band.last_data_retention_run_at == ""
+
+
+def test_data_retention_settings_save_and_load_roundtrip(manager):
+
+    band = manager.create_band("Clio Hattı")
+
+    band.data_retention_enabled = True
+    band.data_retention_period_value = 6
+    band.data_retention_period_unit = "month"
+    band.data_retention_export_destination = "D:/arsiv"
+    band.last_data_retention_run_at = "2026-08-06T10:00:00+00:00"
+
+    manager.save_band(band)
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.data_retention_enabled is True
+    assert reloaded.data_retention_period_value == 6
+    assert reloaded.data_retention_period_unit == "month"
+    assert reloaded.data_retention_export_destination == "D:/arsiv"
+    assert reloaded.last_data_retention_run_at == "2026-08-06T10:00:00+00:00"
+
+
+def test_load_band_without_data_retention_fields_defaults(manager):
+
+    import json
+
+    band = manager.create_band("Eski Band")
+
+    data = json.loads((band.root / "band.json").read_text(encoding="utf-8"))
+    assert "data_retention_enabled" not in data
+
+    reloaded = manager.load_band(band.id)
+
+    assert reloaded.data_retention_enabled is False
+    assert reloaded.data_retention_period_unit == "year"
+
+
 def test_new_band_has_no_extra_camera_channels(manager):
 
     band = manager.create_band("Clio Hattı")

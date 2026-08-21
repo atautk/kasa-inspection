@@ -201,7 +201,27 @@ class BandManager:
 
             auto_backup_keep_count=data.get("auto_backup_keep_count", 30),
 
-            last_auto_backup_at=data.get("last_auto_backup_at", "")
+            last_auto_backup_at=data.get("last_auto_backup_at", ""),
+
+            data_retention_enabled=data.get(
+                "data_retention_enabled", False
+            ),
+
+            data_retention_period_value=data.get(
+                "data_retention_period_value", 1
+            ),
+
+            data_retention_period_unit=data.get(
+                "data_retention_period_unit", "year"
+            ),
+
+            data_retention_export_destination=data.get(
+                "data_retention_export_destination", ""
+            ),
+
+            last_data_retention_run_at=data.get(
+                "last_data_retention_run_at", ""
+            )
 
         )
 
@@ -259,7 +279,15 @@ class BandManager:
             "auto_backup_destination": band.auto_backup_destination,
             "auto_backup_interval_hours": band.auto_backup_interval_hours,
             "auto_backup_keep_count": band.auto_backup_keep_count,
-            "last_auto_backup_at": band.last_auto_backup_at
+            "last_auto_backup_at": band.last_auto_backup_at,
+
+            "data_retention_enabled": band.data_retention_enabled,
+            "data_retention_period_value": band.data_retention_period_value,
+            "data_retention_period_unit": band.data_retention_period_unit,
+            "data_retention_export_destination": (
+                band.data_retention_export_destination
+            ),
+            "last_data_retention_run_at": band.last_data_retention_run_at
 
         }
 

@@ -350,6 +350,65 @@ def _set_timestamp(logger, record_id, iso_timestamp):
     conn.close()
 
 
+def test_compute_stats_before_only_includes_older_records(logger):
+
+    logger.log(make_result(True), "clio")
+    old_id = logger.last_inserted_id
+
+    logger.log(make_result(False), "clio")
+
+    _set_timestamp(logger, old_id, "2000-01-01T00:00:00+00:00")
+
+    stats = logger.compute_stats_before("2020-01-01T00:00:00+00:00")
+
+    assert stats["total"] == 1
+    assert stats["ok_count"] == 1
+    assert stats["ng_count"] == 0
+
+
+def test_delete_before_removes_old_records_and_keeps_new(logger):
+
+    logger.log(make_result(True), "clio", image_path="old.png")
+    old_id = logger.last_inserted_id
+
+    logger.log(make_result(False), "clio", image_path="new.png")
+    new_id = logger.last_inserted_id
+
+    _set_timestamp(logger, old_id, "2000-01-01T00:00:00+00:00")
+
+    image_paths = logger.delete_before("2020-01-01T00:00:00+00:00")
+
+    assert image_paths == ["old.png"]
+
+    remaining_ids = [row["id"] for row in logger.fetch_recent(100)]
+    assert remaining_ids == [new_id]
+
+
+def test_delete_before_returns_training_image_paths(logger):
+
+    logger.log(
+        make_result(True), "clio",
+        training_image_paths={
+            "G01": {"reference": "ref.png", "current": "cur.png"}
+        }
+    )
+    old_id = logger.last_inserted_id
+
+    _set_timestamp(logger, old_id, "2000-01-01T00:00:00+00:00")
+
+    image_paths = logger.delete_before("2020-01-01T00:00:00+00:00")
+
+    assert set(image_paths) == {"ref.png", "cur.png"}
+
+
+def test_delete_before_with_nothing_older_returns_empty_list(logger):
+
+    logger.log(make_result(True), "clio")
+
+    assert logger.delete_before("2000-01-01T00:00:00+00:00") == []
+    assert len(logger.fetch_recent(100)) == 1
+
+
 def _shift(name, start, end):
 
     from modules.configuration.shift_window import ShiftWindow

@@ -25,6 +25,7 @@ from modules.configuration.inspection_logger import InspectionLogger
 from modules.configuration.ng_capture_manager import NGCaptureManager
 from modules.configuration.training_data_manager import TrainingDataManager
 from modules.configuration.backup_manager import BackupManager
+from modules.configuration.data_retention_manager import DataRetentionManager
 from modules.configuration.unknown_kasa_capture_manager import (
     UnknownKasaCaptureManager
 )
@@ -62,6 +63,9 @@ from modules.ui.inspection.controller_mixins.reference_age_mixin import (
 from modules.ui.inspection.controller_mixins.auto_backup_mixin import (
     AutoBackupMixin
 )
+from modules.ui.inspection.controller_mixins.data_retention_mixin import (
+    DataRetentionMixin
+)
 from modules.ui.inspection.controller_mixins.marker_detection_mixin import (
     MarkerDetectionMixin
 )
@@ -86,6 +90,7 @@ class InspectionUIController(
     BlurDetectionMixin,
     ReferenceAgeMixin,
     AutoBackupMixin,
+    DataRetentionMixin,
     MarkerDetectionMixin,
     ArduinoMixin,
     DiskSpaceMixin,
@@ -94,7 +99,8 @@ class InspectionUIController(
     İnceleme (Inspection) ekranının ana orkestratörü: kamera/tick
     döngüsü, band/model seçimi, çoklu kamera kanalları ve arayüz
     kablolaması burada; NG bildirimi, vardiya takibi, bulanıklık,
-    referans yaşı, otomatik yedekleme, ArUco marker tespiti, oturum
+    referans yaşı, otomatik yedekleme, veri saklama, ArUco marker
+    tespiti, oturum
     toparlanma, Arduino ve disk alanı gibi kendi başına özellik
     grupları controller_mixins/ altındaki ayrı mixin sınıflarında.
 
@@ -175,9 +181,12 @@ class InspectionUIController(
         self.ng_capture_manager = NGCaptureManager()
         self.training_data_manager = TrainingDataManager()
         self.backup_manager = BackupManager()
+        self.data_retention_manager = DataRetentionManager()
 
         self._backup_thread = None
         self._last_backup_check_attempt = 0.0
+        self._data_retention_thread = None
+        self._last_data_retention_check_attempt = 0.0
         self.unknown_kasa_capture_manager = UnknownKasaCaptureManager()
 
         # ArUco marker ile otomatik model tespiti - bkz.
@@ -1119,6 +1128,7 @@ class InspectionUIController(
         self._maybe_check_shift_progress()
         self._maybe_check_reference_age()
         self._maybe_run_auto_backup()
+        self._maybe_run_data_retention()
 
         if self.arduino_controller is not None:
 

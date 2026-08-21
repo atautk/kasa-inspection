@@ -805,6 +805,84 @@ class InspectionLogger:
         return True
 
     # -------------------------------------------------
+    # Veri Saklama: Süresi Geçen Kayıtları Arşivle/Sil
+    # -------------------------------------------------
+    #
+    # DataRetentionManager tarafından kullanılır: silmeden önce
+    # before_iso'dan eski kayıtların özetini almak (compute_stats_before)
+    # ve ardından bu kayıtları silmek (delete_before) için.
+
+    def compute_stats_before(self, before_iso: str) -> dict:
+
+        conn = self._connect()
+
+        try:
+
+            conn.row_factory = sqlite3.Row
+
+            rows = conn.execute(
+                "SELECT model_name, overall_result, roi_results "
+                "FROM inspections WHERE timestamp < ?",
+                (before_iso,)
+            ).fetchall()
+
+        finally:
+
+            conn.close()
+
+        return self._aggregate_rows(rows)
+
+    def delete_before(self, before_iso: str) -> list:
+        """
+        before_iso'dan eski kayıtları DB'den siler. Silinen kayıtlara
+        ait (varsa) HATA fotoğrafı ve eğitim verisi görüntü yollarını
+        döner - DB satırı silindiğinde bu dosyalar kendiliğinden
+        silinmez, çağıran taraf (DataRetentionManager) bu yolları
+        kullanarak dosyaları diskten de kaldırır.
+        """
+
+        conn = self._connect()
+
+        try:
+
+            rows = conn.execute(
+                "SELECT image_path, training_image_paths FROM inspections "
+                "WHERE timestamp < ?",
+                (before_iso,)
+            ).fetchall()
+
+            image_paths = []
+
+            for image_path, training_image_paths_json in rows:
+
+                if image_path:
+                    image_paths.append(image_path)
+
+                if training_image_paths_json:
+
+                    try:
+                        training_paths = json.loads(training_image_paths_json)
+                    except Exception:
+                        training_paths = {}
+
+                    for pair in training_paths.values():
+                        for path in pair.values():
+                            if path:
+                                image_paths.append(path)
+
+            conn.execute(
+                "DELETE FROM inspections WHERE timestamp < ?", (before_iso,)
+            )
+
+            conn.commit()
+
+        finally:
+
+            conn.close()
+
+        return image_paths
+
+    # -------------------------------------------------
     # Geçmişi Temizle
     # -------------------------------------------------
 

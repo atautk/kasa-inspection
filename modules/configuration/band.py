@@ -66,3 +66,15 @@ class Band:
     auto_backup_interval_hours: float = 24.0
     auto_backup_keep_count: int = 30
     last_auto_backup_at: str = ""
+
+    # Veri saklama: açıksa, data_retention_period_value/_unit'ten (ör.
+    # "6 ay", "1 yıl") eski inceleme kayıtları silinmeden ÖNCE bir özet
+    # Excel raporu olarak data_retention_export_destination'a dışa
+    # aktarılır - veri sessizce kaybolmaz, arşiv raporu olarak kalır.
+    # Sonra DB'den ve ilişkili HATA/eğitim fotoğraflarından silinir -
+    # bkz. DataRetentionManager, InspectionUIController._maybe_run_data_retention.
+    data_retention_enabled: bool = False
+    data_retention_period_value: int = 1
+    data_retention_period_unit: str = "year"
+    data_retention_export_destination: str = ""
+    last_data_retention_run_at: str = ""
