@@ -7,6 +7,8 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from modules.utils.display_terms import result_label, state_label
+
 
 class InspectionLogExporter:
 
@@ -17,7 +19,7 @@ class InspectionLogExporter:
         "Sonuç",
         "İncelendi",
         "Orijinal Sonuç",
-        "ROI Detayları",
+        "Göz Detayları",
         "Fotoğraf Yolu"
     ]
 
@@ -45,9 +47,9 @@ class InspectionLogExporter:
         workbook = Workbook()
 
         sheet = workbook.active
-        sheet.title = "Inspection Log"
+        sheet.title = "İnceleme Kaydı"
 
-        title = f"Inspection Geçmişi - {band_name}" if band_name else "Inspection Geçmişi"
+        title = f"İnceleme Geçmişi - {band_name}" if band_name else "İnceleme Geçmişi"
 
         sheet.append([title])
         sheet.append(self.HEADERS)
@@ -63,9 +65,9 @@ class InspectionLogExporter:
                 row["id"],
                 self._format_timestamp(row["timestamp"]),
                 row["model_name"] or "-",
-                row["overall_result"],
+                result_label(row["overall_result"]),
                 "Evet" if row.get("reviewed") else "-",
-                row.get("original_result") or "-",
+                result_label(row.get("original_result")) if row.get("original_result") else "-",
                 roi_text,
                 row.get("image_path") or "-"
             ])
@@ -88,7 +90,7 @@ class InspectionLogExporter:
                 get_column_letter(column_index)
             ].width = max(12, len(header) + 2)
 
-        roi_column = self.HEADERS.index("ROI Detayları") + 1
+        roi_column = self.HEADERS.index("Göz Detayları") + 1
         image_column = self.HEADERS.index("Fotoğraf Yolu") + 1
 
         sheet.column_dimensions[
@@ -114,11 +116,12 @@ class InspectionLogExporter:
 
         for name, data in sorted(roi_results.items()):
 
-            status = "OK" if data.get("ok") else "NG"
+            status = result_label("OK" if data.get("ok") else "NG")
 
             parts.append(
                 f"{name}: {status} "
-                f"({data.get('state')}, beklenen {data.get('expected')})"
+                f"({state_label(str(data.get('state')))}, "
+                f"beklenen {state_label(str(data.get('expected')))})"
             )
 
         return "; ".join(parts)

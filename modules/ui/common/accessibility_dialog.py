@@ -44,12 +44,12 @@ class AccessibilityDialog(QDialog):
 
         self.high_contrast_checkbox = QCheckBox(
             "Yüksek Kontrast / Renk Körü Dostu Mod "
-            "(OK = mavi, NG = turuncu)"
+            "(UYGUN = mavi, HATA = turuncu)"
         )
         layout.addWidget(self.high_contrast_checkbox)
 
         info_label = QLabel(
-            "Not: OK/NG durumu her zaman ayrıca yazıyla da "
+            "Not: UYGUN/HATA durumu her zaman ayrıca yazıyla da "
             "gösterilir; bu ayar sadece renkleri değiştirir."
         )
         info_label.setWordWrap(True)

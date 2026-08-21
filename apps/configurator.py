@@ -46,7 +46,7 @@ def main():
     operator_name = login.authenticated_operator
 
     window = MainWindow()
-    window.setWindowTitle(f"KASA CONFIGURATOR - {operator_name}")
+    window.setWindowTitle(f"KASA KURULUM - {operator_name}")
 
     from modules.ui.configurator.configurator_controller import ConfiguratorController
     controller = ConfiguratorController(

@@ -150,7 +150,7 @@ class ModelPage(QWidget):
         right_column.addWidget(
             QLabel(
                 "Beklenen Durum (İşaretli = DOLU) — "
-                "listeden veya fotoğraftaki ROI'ye tıklayarak seçin"
+                "listeden veya fotoğraftaki göze tıklayarak seçin"
             )
         )
 
@@ -172,7 +172,7 @@ class ModelPage(QWidget):
         self.roi_checklist = QTableWidget()
         self.roi_checklist.setColumnCount(3)
         self.roi_checklist.setHorizontalHeaderLabels(
-            ["DOLU", "ROI", "Eşik Override (%)"]
+            ["DOLU", "Göz", "Eşik Override (%)"]
         )
         self.roi_checklist.horizontalHeader().setSectionResizeMode(
             1, QHeaderView.Stretch
@@ -186,7 +186,7 @@ class ModelPage(QWidget):
         marker_row = QHBoxLayout()
 
         marker_row.addWidget(
-            QLabel("Sol Üst Tanı Marker ID (opsiyonel):")
+            QLabel("Sol Üst Tanı İşaret Kimliği (opsiyonel):")
         )
 
         self.marker_id_input = QSpinBox()

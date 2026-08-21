@@ -111,7 +111,7 @@ class ConfigurationValidator:
                 if roi_name not in roi_names:
 
                     errors.append(
-                        f"{model.name}: '{roi_name}' ROI'si "
+                        f"{model.name}: '{roi_name}' gözü "
                         "roi.json'da bulunamadı (silinmiş/yeniden "
                         "adlandırılmış olabilir)."
                     )

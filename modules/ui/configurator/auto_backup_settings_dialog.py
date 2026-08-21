@@ -37,7 +37,7 @@ class AutoBackupSettingsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         info_label = QLabel(
-            "Açıksa, inspection geçmişi (SQLite log + NG fotoğrafları) "
+            "Açıksa, inceleme geçmişi (SQLite log + hata fotoğrafları) "
             "periyodik olarak aşağıdaki klasöre kopyalanır. Mümkünse "
             "bu klasörün band'in bulunduğu diskten FARKLI bir yerde "
             "(ayrı disk, ağ paylaşımı) olması önerilir - aynı diskte "

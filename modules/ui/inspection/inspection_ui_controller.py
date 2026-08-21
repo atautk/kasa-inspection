@@ -466,7 +466,7 @@ class InspectionUIController(
             self.window,
             "Band Yapılandırması Eksik",
             f"'{band.name}' bandında şu sorunlar var:\n\n{message}\n\n"
-            "İncelemeye başlamadan önce Configurator'dan düzeltmeniz "
+            "İncelemeye başlamadan önce Kurulum'dan düzeltmeniz "
             "önerilir."
         )
 
@@ -652,7 +652,7 @@ class InspectionUIController(
 
         self.page.set_start_button_text("&Durdur")
         self.page.enable_selection(False)
-        self.page.set_status("CONNECTED")
+        self.page.set_status("BAĞLANDI")
 
         self.last_tick_time = time.perf_counter()
 
@@ -755,7 +755,7 @@ class InspectionUIController(
             self.current_band.name if self.current_band is not None else "?"
         )
 
-        self.page.set_status("Kamera yeniden bağlandı - CONNECTED")
+        self.page.set_status("Kamera yeniden bağlandı - BAĞLANDI")
 
     def _stop(self):
 
@@ -803,7 +803,7 @@ class InspectionUIController(
         if self.debug_dialog is not None:
             self.debug_dialog.hide()
             self.debug_enabled = False
-            self.page.set_debug_button_text("&Debug Göster")
+            self.page.set_debug_button_text("&Hata Ayıklama Göster")
 
     # -------------------------------------------------
     # Reference Kaydet
@@ -816,7 +816,7 @@ class InspectionUIController(
             QMessageBox.warning(
                 self.window,
                 "Uyarı",
-                "Kaydedilecek bir reference görüntüsü yok."
+                "Kaydedilecek bir referans görüntüsü yok."
             )
 
             return
@@ -833,7 +833,7 @@ class InspectionUIController(
         QMessageBox.information(
             self.window,
             "Başarılı",
-            "Reference güncellendi."
+            "Referans güncellendi."
         )
 
     # -------------------------------------------------
@@ -872,23 +872,23 @@ class InspectionUIController(
             self.debug_dialog.show()
 
             self.debug_enabled = True
-            self.page.set_debug_button_text("&Debug Gizle")
+            self.page.set_debug_button_text("&Hata Ayıklama Gizle")
 
             return
 
         if self.debug_dialog.isVisible():
             self.debug_dialog.hide()
             self.debug_enabled = False
-            self.page.set_debug_button_text("&Debug Göster")
+            self.page.set_debug_button_text("&Hata Ayıklama Göster")
         else:
             self.debug_dialog.show()
             self.debug_enabled = True
-            self.page.set_debug_button_text("&Debug Gizle")
+            self.page.set_debug_button_text("&Hata Ayıklama Gizle")
 
     def _on_debug_dialog_closed(self):
 
         self.debug_enabled = False
-        self.page.set_debug_button_text("&Debug Göster")
+        self.page.set_debug_button_text("&Hata Ayıklama Göster")
 
     # -------------------------------------------------
     # Geçmiş
@@ -939,7 +939,7 @@ class InspectionUIController(
         answer = QMessageBox.question(
             self.window,
             "Emin misiniz?",
-            "Bu bandın tüm inspection geçmişi ve NG fotoğrafları "
+            "Bu bandın tüm inceleme geçmişi ve hata fotoğrafları "
             "silinecek. Devam edilsin mi?"
         )
 
@@ -1284,7 +1284,7 @@ class InspectionUIController(
         self.page.set_performance(fps, inspection_time)
 
         if result["results"]:
-            self.page.set_status("CONNECTED")
+            self.page.set_status("BAĞLANDI")
         else:
             self.page.set_status("Kamera bekleniyor / Parça yok")
 

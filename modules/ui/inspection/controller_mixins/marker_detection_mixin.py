@@ -109,7 +109,7 @@ class MarkerDetectionMixin:
     def _handle_unknown_kasa(self, candidate_id, result):
 
         self.page.show_unknown_kasa_warning(
-            f"Tanınmayan kasa (marker {candidate_id}) — mühendis "
+            f"Tanınmayan kasa (işaret {candidate_id}) — mühendis "
             "incelemesi için kaydedildi."
         )
 
@@ -157,7 +157,7 @@ class MarkerDetectionMixin:
 
         text = (
             f"❓ Tanınmayan kasa - {band_name}\n"
-            f"Marker ID: {candidate_id}. Fotoğraf ve göz durumları "
+            f"İşaret Kimliği: {candidate_id}. Fotoğraf ve göz durumları "
             "kaydedildi, model tanımı gerekiyor."
         )
 

@@ -36,6 +36,7 @@ from modules.configuration.backup_manager import BackupManager
 from modules.configuration.training_data_manager import TrainingDataManager
 from modules.utils.logger import get_logger
 from modules.utils import accessibility_settings as a11y
+from modules.utils.display_terms import result_label, state_label
 
 app_logger = get_logger()
 
@@ -57,7 +58,7 @@ class LogViewerDialog(QDialog):
 
     COLUMNS = ["ID", "Zaman", "Model", "Sonuç", "İncelendi"]
 
-    ROI_DETAIL_COLUMNS = ["ROI", "Sonuç", "Tespit Edilen", "Beklenen"]
+    ROI_DETAIL_COLUMNS = ["Göz", "Sonuç", "Tespit Edilen", "Beklenen"]
 
     def __init__(
         self,
@@ -84,7 +85,7 @@ class LogViewerDialog(QDialog):
         self.current_image_path = None
         self.image_dialogs = []
 
-        self.setWindowTitle(f"Inspection Geçmişi - {band_name}")
+        self.setWindowTitle(f"İnceleme Geçmişi - {band_name}")
         restore_or_center(self, SETTINGS_KEY, 1300, 800)
 
         layout = QVBoxLayout(self)
@@ -158,7 +159,7 @@ class LogViewerDialog(QDialog):
         self.enlarge_image_button.clicked.connect(self._on_enlarge_image)
         right_col.addWidget(self.enlarge_image_button)
 
-        right_col.addWidget(QLabel("ROI Detayları:"))
+        right_col.addWidget(QLabel("Göz Detayları:"))
 
         self.roi_detail_table = QTableWidget()
         self.roi_detail_table.setColumnCount(len(self.ROI_DETAIL_COLUMNS))
@@ -183,7 +184,7 @@ class LogViewerDialog(QDialog):
         button_row = QHBoxLayout()
 
         self.correct_roi_button = QPushButton(
-            "Seçili ROI'yi Düzelt (Yanlış Tespit, OK Yap)"
+            "Seçili Gözü Düzelt (Yanlış Tespit, UYGUN Yap)"
         )
         self.correct_roi_button.setEnabled(False)
         self.correct_roi_button.clicked.connect(
@@ -191,7 +192,7 @@ class LogViewerDialog(QDialog):
         )
         button_row.addWidget(self.correct_roi_button)
 
-        self.mark_ok_button = QPushButton("Seçili Kaydı İncelendi/OK Yap")
+        self.mark_ok_button = QPushButton("Seçili Kaydı İncelendi/UYGUN Yap")
         self.mark_ok_button.setEnabled(False)
         self.mark_ok_button.clicked.connect(self._on_mark_ok_clicked)
         button_row.addWidget(self.mark_ok_button)
@@ -223,7 +224,7 @@ class LogViewerDialog(QDialog):
 
         trend_column = QVBoxLayout()
         trend_column.addWidget(
-            QLabel("Günlük NG Oranı Trendi (son 30 gün):")
+            QLabel("Günlük Hata Oranı Trendi (son 30 gün):")
         )
 
         self.trend_chart = TrendChartWidget()
@@ -236,7 +237,7 @@ class LogViewerDialog(QDialog):
         # ---------- Vardiya Bazında NG Oranı ----------
 
         stats_layout.addWidget(
-            QLabel("Vardiya Bazlı NG Oranı Trendi (son 20 vardiya):")
+            QLabel("Vardiya Bazlı Hata Oranı Trendi (son 20 vardiya):")
         )
 
         self.shift_trend_chart = TrendChartWidget()
@@ -258,7 +259,7 @@ class LogViewerDialog(QDialog):
         self.model_stats_table = QTableWidget()
         self.model_stats_table.setColumnCount(4)
         self.model_stats_table.setHorizontalHeaderLabels(
-            ["Model", "OK", "NG", "NG Oranı"]
+            ["Model", "UYGUN", "HATA", "HATA Oranı"]
         )
         self.model_stats_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.Stretch
@@ -287,7 +288,7 @@ class LogViewerDialog(QDialog):
         # ---------- ROI Bazında ----------
 
         roi_header_row = QHBoxLayout()
-        roi_header_row.addWidget(QLabel("ROI Bazında (en çok NG üstte):"))
+        roi_header_row.addWidget(QLabel("Göz Bazında (en çok hata üstte):"))
         roi_header_row.addStretch()
         roi_header_row.addWidget(QLabel("Gösterim:"))
 
@@ -300,7 +301,7 @@ class LogViewerDialog(QDialog):
         self.roi_stats_table = QTableWidget()
         self.roi_stats_table.setColumnCount(4)
         self.roi_stats_table.setHorizontalHeaderLabels(
-            ["ROI", "OK", "NG", "NG Oranı"]
+            ["Göz", "UYGUN", "HATA", "HATA Oranı"]
         )
         self.roi_stats_table.horizontalHeader().setSectionResizeMode(
             QHeaderView.Stretch
@@ -375,7 +376,7 @@ class LogViewerDialog(QDialog):
         QMessageBox.information(
             self,
             "Başarılı",
-            f"Inspection geçmişi şu dosyaya aktarıldı:\n{path}"
+            f"İnceleme geçmişi şu dosyaya aktarıldı:\n{path}"
         )
 
     # -------------------------------------------------
@@ -456,7 +457,7 @@ class LogViewerDialog(QDialog):
 
             reviewed_text = (
                 f"Evet - {row['reviewed_by'] or '?'} "
-                f"(orijinal: {row['original_result']})"
+                f"(orijinal: {result_label(row['original_result'])})"
                 if reviewed
                 else "-"
             )
@@ -465,7 +466,7 @@ class LogViewerDialog(QDialog):
                 str(row["id"]),
                 self._format_timestamp(row["timestamp"]),
                 row["model_name"] or "-",
-                row["overall_result"],
+                result_label(row["overall_result"]),
                 reviewed_text
             ]
 
@@ -507,18 +508,18 @@ class LogViewerDialog(QDialog):
         ng_ratio = (ng_count / total * 100) if total else 0.0
 
         self.summary_label.setText(
-            f"Toplam: {total}  |  OK: {ok_count}  |  "
-            f"NG: {ng_count}  |  NG Oranı: %{ng_ratio:.1f}"
+            f"Toplam: {total}  |  UYGUN: {ok_count}  |  "
+            f"HATA: {ng_count}  |  HATA Oranı: %{ng_ratio:.1f}"
         )
 
         self.overview_pie_chart.set_data([
             {
-                "label": "OK",
+                "label": "UYGUN",
                 "value": ok_count,
                 "color": QColor(*a11y.get_ok_color_rgb())
             },
             {
-                "label": "NG",
+                "label": "HATA",
                 "value": ng_count,
                 "color": QColor(*a11y.get_ng_color_rgb())
             }
@@ -650,8 +651,8 @@ class LogViewerDialog(QDialog):
         answer = QMessageBox.question(
             self,
             "Emin misiniz?",
-            f"{row['id']} numaralı NG kaydı incelendi olarak "
-            f"işaretlenip OK'e çevrilecek. Orijinal NG sonucu "
+            f"{row['id']} numaralı HATA kaydı incelendi olarak "
+            f"işaretlenip UYGUN'a çevrilecek. Orijinal HATA sonucu "
             f"(ileride model eğitimi için) saklanacak. Devam "
             f"edilsin mi?"
         )
@@ -721,7 +722,7 @@ class LogViewerDialog(QDialog):
             self,
             "Emin misiniz?",
             f"{roi_name} yanlış tespit edilmiş (örn. dolu bir göz "
-            f"boş görülmüş) kabul edilip OK olarak düzeltilecek. "
+            f"boş görülmüş) kabul edilip UYGUN olarak düzeltilecek. "
             f"Orijinal tespit (model eğitimi için) saklanacak. "
             f"Devam edilsin mi?"
         )
@@ -784,9 +785,9 @@ class LogViewerDialog(QDialog):
 
             values = [
                 name,
-                "OK" if ok else "NG",
-                str(data.get("state")),
-                str(data.get("expected"))
+                result_label("OK" if ok else "NG"),
+                state_label(str(data.get("state"))),
+                state_label(str(data.get("expected")))
             ]
 
             for column_index, value in enumerate(values):

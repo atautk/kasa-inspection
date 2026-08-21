@@ -52,9 +52,9 @@ def test_export_contains_totals_and_ratio(tmp_path):
     flat_labels = [row[0] for row in values if row and row[0]]
 
     assert "Toplam Kontrol" in flat_labels
-    assert "OK" in flat_labels
-    assert "NG" in flat_labels
-    assert "NG Oranı (%)" in flat_labels
+    assert "UYGUN" in flat_labels
+    assert "HATA" in flat_labels
+    assert "HATA Oranı (%)" in flat_labels
 
     totals_row = next(
         row for row in values if row and row[0] == "Toplam Kontrol"
@@ -62,7 +62,7 @@ def test_export_contains_totals_and_ratio(tmp_path):
     assert totals_row[1] == 10
 
     ratio_row = next(
-        row for row in values if row and row[0] == "NG Oranı (%)"
+        row for row in values if row and row[0] == "HATA Oranı (%)"
     )
     assert ratio_row[1] == 30.0
 
@@ -108,6 +108,6 @@ def test_export_handles_zero_total_without_division_error(tmp_path):
     rows = [[cell.value for cell in row] for row in sheet.iter_rows()]
 
     ratio_row = next(
-        row for row in rows if row and row[0] == "NG Oranı (%)"
+        row for row in rows if row and row[0] == "HATA Oranı (%)"
     )
     assert ratio_row[1] == 0.0

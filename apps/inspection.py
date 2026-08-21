@@ -46,7 +46,7 @@ def main():
     operator_name = login.authenticated_operator
 
     window = InspectionWindow()
-    window.setWindowTitle(f"KASA INSPECTION - {operator_name}")
+    window.setWindowTitle(f"KASA İNCELEME - {operator_name}")
 
     from modules.ui.inspection.inspection_ui_controller import InspectionUIController
     controller = InspectionUIController(

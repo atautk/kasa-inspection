@@ -14,7 +14,7 @@ class InspectionWindow(QMainWindow):
 
         super().__init__()
 
-        self.setWindowTitle("KASA INSPECTION")
+        self.setWindowTitle("KASA İNCELEME")
 
         restore_or_center(self, SETTINGS_KEY, 1500, 900)
 

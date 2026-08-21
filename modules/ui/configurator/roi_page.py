@@ -316,7 +316,7 @@ class ROIPage(QWidget):
         self.channel_combo = QComboBox()
         self.channel_combo.setToolTip(
             "Bu band birden fazla kameraya sahip. Hangi kameranın "
-            "ROI'lerini düzenlediğinizi buradan seçin."
+            "gözlerini düzenlediğinizi buradan seçin."
         )
         channel_row.addWidget(self.channel_combo, stretch=1)
 
@@ -327,12 +327,12 @@ class ROIPage(QWidget):
         # ---------- Bilgi ----------
 
         self.status_label = QLabel(
-            "Reference yüklenmedi."
+            "Referans yüklenmedi."
         )
         layout.addWidget(self.status_label)
 
         self.info_label = QLabel(
-            "ROI Sayısı: 0"
+            "Göz Sayısı: 0"
         )
         layout.addWidget(self.info_label)
 
@@ -346,14 +346,14 @@ class ROIPage(QWidget):
 
         button_row = QHBoxLayout()
 
-        self.new_roi_button = QPushButton("Yeni ROI")
+        self.new_roi_button = QPushButton("Yeni Göz")
         self.new_roi_button.setCheckable(True)
         self.new_roi_button.clicked.connect(
             self.toggle_drawing_mode
         )
         button_row.addWidget(self.new_roi_button)
 
-        self.auto_detect_button = QPushButton("Otomatik ROI Bul")
+        self.auto_detect_button = QPushButton("Otomatik Göz Bul")
         button_row.addWidget(self.auto_detect_button)
 
         self.delete_button = QPushButton("Sil")
@@ -409,7 +409,7 @@ class ROIPage(QWidget):
             Qt.KeepAspectRatio
         )
 
-        self.set_status("Reference yüklendi.")
+        self.set_status("Referans yüklendi.")
 
     # -------------------------------------------------
     # ROI Yükleme / Okuma
@@ -481,7 +481,7 @@ class ROIPage(QWidget):
 
         else:
 
-            self.new_roi_button.setText("Yeni ROI")
+            self.new_roi_button.setText("Yeni Göz")
             self._cancel_drawing()
 
     def add_draw_point(self, scene_pos):
@@ -522,7 +522,7 @@ class ROIPage(QWidget):
         self._cancel_drawing()
 
         self.new_roi_button.setChecked(False)
-        self.new_roi_button.setText("Yeni ROI")
+        self.new_roi_button.setText("Yeni Göz")
         self.drawing_mode = False
 
         self.set_status(f"{name} eklendi.")
@@ -558,7 +558,7 @@ class ROIPage(QWidget):
 
         self._update_info()
 
-        self.set_status(f"{len(selected)} ROI silindi.")
+        self.set_status(f"{len(selected)} göz silindi.")
 
     # -------------------------------------------------
     # Yardımcı
@@ -571,7 +571,7 @@ class ROIPage(QWidget):
     def _update_info(self):
 
         self.info_label.setText(
-            f"ROI Sayısı: {len(self.polygon_items)}"
+            f"Göz Sayısı: {len(self.polygon_items)}"
         )
 
     def _generate_id(self):

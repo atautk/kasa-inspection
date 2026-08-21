@@ -34,22 +34,22 @@ class LauncherWindow(QWidget):
 
         super().__init__()
 
-        self.setWindowTitle("KASA INSPECTION")
+        self.setWindowTitle("KASA ANA MENÜ")
 
         restore_or_center(self, SETTINGS_KEY, 360, 220)
 
         layout = QVBoxLayout(self)
 
-        title = QLabel("KASA INSPECTION SYSTEM")
+        title = QLabel("KASA KALİTE KONTROL SİSTEMİ")
         title.setAlignment(Qt.AlignCenter)
         layout.addWidget(title)
 
-        configurator_button = QPushButton("Configurator")
+        configurator_button = QPushButton("Kurulum")
         configurator_button.setMinimumHeight(48)
         configurator_button.clicked.connect(self.launch_configurator)
         layout.addWidget(configurator_button)
 
-        inspection_button = QPushButton("Inspection")
+        inspection_button = QPushButton("İnceleme")
         inspection_button.setMinimumHeight(48)
         inspection_button.clicked.connect(self.launch_inspection)
         layout.addWidget(inspection_button)

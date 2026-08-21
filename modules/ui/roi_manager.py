@@ -5,6 +5,7 @@ import uuid
 import numpy as np
 
 from modules.utils import accessibility_settings as a11y
+from modules.utils.display_terms import result_label
 
 
 class ROIManager:
@@ -366,11 +367,11 @@ class ROIManager:
 
                 if results[name]["ok"]:
                     color = a11y.get_ok_color_bgr()
-                    text = f"{name} OK"
+                    text = f"{name} {result_label('OK')}"
 
                 else:
                     color = a11y.get_ng_color_bgr()
-                    text = f"{name} NG"
+                    text = f"{name} {result_label('NG')}"
 
             cv2.polylines(
                 output,

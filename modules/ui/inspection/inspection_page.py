@@ -18,6 +18,7 @@ from PySide6.QtGui import QImage, QPixmap, QColor
 from PySide6.QtCore import Qt
 
 from modules.utils import accessibility_settings as a11y
+from modules.utils.display_terms import result_label, state_label, mode_label
 
 
 class InspectionPage(QWidget):
@@ -58,7 +59,7 @@ class InspectionPage(QWidget):
     """
 
     COLUMNS = [
-        "ROI",
+        "Göz",
         "Durum",
         "Beklenen",
         "Sonuç",
@@ -72,9 +73,9 @@ class InspectionPage(QWidget):
 
         root = QVBoxLayout(self)
 
-        # ---------- NG Uyarı Bannerı ----------
+        # ---------- Hata Uyarı Bannerı ----------
 
-        self.ng_banner = QLabel("⚠ NG !")
+        self.ng_banner = QLabel("⚠ HATA !")
         self.ng_banner.setAlignment(Qt.AlignCenter)
         self.ng_banner.setStyleSheet(
             "background-color: #cc0000; color: white; "
@@ -155,7 +156,7 @@ class InspectionPage(QWidget):
         tools_group = QGroupBox("Araçlar")
         tools_row = QHBoxLayout(tools_group)
 
-        self.save_reference_button = QPushButton("&Reference Kaydet")
+        self.save_reference_button = QPushButton("&Referans Kaydet")
         tools_row.addWidget(self.save_reference_button)
 
         self.history_button = QPushButton("&Geçmiş")
@@ -163,7 +164,7 @@ class InspectionPage(QWidget):
 
         tools_row.addStretch()
 
-        self.debug_button = QPushButton("&Debug Göster")
+        self.debug_button = QPushButton("&Hata Ayıklama Göster")
         tools_row.addWidget(self.debug_button)
 
         root.addWidget(tools_group)
@@ -206,13 +207,13 @@ class InspectionPage(QWidget):
 
         info_row = QHBoxLayout()
 
-        self.mode_label = QLabel("Mode: -")
+        self.mode_label = QLabel("Mod: -")
         info_row.addWidget(self.mode_label)
 
-        self.confidence_label = QLabel("Confidence: -")
+        self.confidence_label = QLabel("Güven: -")
         info_row.addWidget(self.confidence_label)
 
-        self.performance_label = QLabel("FPS: - | Süre: -")
+        self.performance_label = QLabel("Kare/sn: - | Süre: -")
         info_row.addWidget(self.performance_label)
 
         self.shift_label = QLabel("Vardiya: -")
@@ -330,9 +331,9 @@ class InspectionPage(QWidget):
 
             values = [
                 roi_name,
-                str(data.get("state", "-")),
-                str(data.get("expected", "-")),
-                "OK" if ok else "NG",
+                state_label(str(data.get("state", "-"))),
+                state_label(str(data.get("expected", "-"))),
+                result_label("OK" if ok else "NG"),
                 f"{data.get('change_ratio', 0):.2f}",
                 str(data.get("changed_pixels", 0))
             ]
@@ -358,16 +359,16 @@ class InspectionPage(QWidget):
 
     def set_mode(self, text: str):
 
-        self.mode_label.setText(f"Mode: {text}")
+        self.mode_label.setText(f"Mod: {mode_label(text)}")
 
     def set_confidence(self, value):
 
-        self.confidence_label.setText(f"Confidence: {value}")
+        self.confidence_label.setText(f"Güven: {value}")
 
     def set_performance(self, fps: float, inspection_time_ms: float):
 
         self.performance_label.setText(
-            f"FPS: {fps:.1f} | Süre: {inspection_time_ms:.1f} ms"
+            f"Kare/sn: {fps:.1f} | Süre: {inspection_time_ms:.1f} ms"
         )
 
     def set_status(self, text: str):

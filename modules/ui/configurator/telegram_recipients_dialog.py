@@ -19,12 +19,12 @@ from ..window_utils import restore_or_center, save_geometry
 SETTINGS_KEY = "telegram_recipients_dialog"
 
 PAIRING_PROMPT = (
-    "Kasa Inspection bildirimlerine kaydolmak için aşağıdaki "
+    "Kasa İnceleme bildirimlerine kaydolmak için aşağıdaki "
     "\"Numaramı Paylaş\" butonuna basın."
 )
 
 PAIRING_CONFIRMATION = (
-    "Kaydınız alındı, teşekkürler. Artık NG/bağlantı bildirimlerini "
+    "Kaydınız alındı, teşekkürler. Artık HATA/bağlantı bildirimlerini "
     "alabilirsiniz (yönetici sizi aktif hale getirdiğinde)."
 )
 

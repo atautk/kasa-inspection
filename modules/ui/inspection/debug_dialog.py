@@ -30,18 +30,21 @@ class DebugDialog(QDialog):
     THUMB_HEIGHT = 160
     TITLE_HEIGHT = 20
 
+    # cv2.putText (Hershey font) sadece ASCII karakter destekler, bu
+    # yüzden etiketler Türkçe karakter içermeyecek şekilde seçildi
+    # (ör. "İkili" yerine "Ikili").
     LABELS = [
-        ("reference", "Reference"),
-        ("current", "Current"),
-        ("difference", "Difference"),
-        ("binary", "Binary")
+        ("reference", "Referans"),
+        ("current", "Simdi"),
+        ("difference", "Fark"),
+        ("binary", "Ikili")
     ]
 
     def __init__(self, parent=None):
 
         super().__init__(parent)
 
-        self.setWindowTitle("Debug")
+        self.setWindowTitle("Hata Ayıklama")
         restore_or_center(self, SETTINGS_KEY, 900, 650)
 
         layout = QVBoxLayout(self)

@@ -96,7 +96,7 @@ class ReferencePage(QWidget):
         self.status_label = QLabel("Durum: -")
         layout.addWidget(self.status_label)
 
-        self.marker_label = QLabel("Marker: -")
+        self.marker_label = QLabel("İşaret: -")
         layout.addWidget(self.marker_label)
 
         self.resolution_label = QLabel("Çözünürlük: -")
@@ -196,7 +196,7 @@ class ReferencePage(QWidget):
 
     def set_marker_status(self, text: str):
 
-        self.marker_label.setText(f"Marker: {text}")
+        self.marker_label.setText(f"İşaret: {text}")
 
     def set_resolution(self, width: int, height: int):
 

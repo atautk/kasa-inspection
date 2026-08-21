@@ -26,7 +26,7 @@ class TrainingDataSettingsDialog(QDialog):
     klasörlenerek diske kaydedilir - bkz. TrainingDataManager.
     """
 
-    TABLE_COLUMNS = ["ROI", "Durum", "Örnek Sayısı", "Gözden Geçirilmeli", "Yeterlilik"]
+    TABLE_COLUMNS = ["Göz", "Durum", "Örnek Sayısı", "Gözden Geçirilmeli", "Yeterlilik"]
 
     def __init__(self, band, parent=None):
 
@@ -42,7 +42,7 @@ class TrainingDataSettingsDialog(QDialog):
         layout = QVBoxLayout(self)
 
         info_label = QLabel(
-            "Açıksa, her onaylı inceleme sonucunda ROI'lerin referans/"
+            "Açıksa, her onaylı inceleme sonucunda gözlerin referans/"
             "canlı görüntü çiftleri diske kaydedilir (DOLU/BOŞ olarak "
             "klasörlenir). Amaç: ileride bir görüntü sınıflandırma "
             "modeli eğitmek için veri biriktirmek. Kapalıyken hiçbir "
@@ -172,7 +172,7 @@ class TrainingDataSettingsDialog(QDialog):
         roi_count = len(summary)
 
         self.summary_label.setText(
-            f"{roi_count} ROI, toplam {total_samples} örnek"
+            f"{roi_count} göz, toplam {total_samples} örnek"
             + (
                 f" ({total_flagged} gözden geçirilmeli)"
                 if total_flagged else ""

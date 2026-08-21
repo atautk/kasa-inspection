@@ -53,6 +53,7 @@ from modules.configuration.telegram_recipients_manager import (
 from modules.utils.logger import LOG_FILE
 from modules.utils.test_runner import TestRunner
 from modules.utils.paths import get_app_root
+from modules.utils.display_terms import mode_label
 
 ROOT = get_app_root()
 
@@ -394,7 +395,7 @@ class ConfiguratorController:
 
         self.window.setWindowTitle(
 
-            f"KASA CONFIGURATOR - {self.current_band.name}"
+            f"KASA KURULUM - {self.current_band.name}"
 
         )
 
@@ -955,7 +956,7 @@ class ConfiguratorController:
             image = self.reference_manager.load(target)
 
             page.set_preview(image)
-            page.set_status("Kayıtlı reference bulundu")
+            page.set_status("Kayıtlı referans bulundu")
             page.set_marker_status("-")
 
             page.enable_camera_button(True)
@@ -965,7 +966,7 @@ class ConfiguratorController:
         else:
 
             page.clear_preview()
-            page.set_status("Reference yok. Kamerayı açın.")
+            page.set_status("Referans yok. Kamerayı açın.")
             page.set_marker_status("-")
             page.set_resolution(0, 0)
 
@@ -1083,7 +1084,7 @@ class ConfiguratorController:
 
         page.set_marker_status(
             f"{localization['visible']} / 4 "
-            f"({localization['mode']})"
+            f"({mode_label(localization['mode'])})"
         )
 
         if reference is not None:
@@ -1161,7 +1162,7 @@ class ConfiguratorController:
 
             "Başarılı",
 
-            "Reference kaydedildi. ROI sekmesi kullanılabilir."
+            "Referans kaydedildi. Gözler sekmesi kullanılabilir."
 
         )
 
@@ -1175,7 +1176,7 @@ class ConfiguratorController:
 
             "Emin misiniz?",
 
-            "Mevcut reference silinip yeniden çekilecek. "
+            "Mevcut referans silinip yeniden çekilecek. "
             "Devam edilsin mi?"
 
         )
@@ -1190,7 +1191,7 @@ class ConfiguratorController:
         page = self.window.reference_page
 
         page.clear_preview()
-        page.set_status("Reference silindi. Kamerayı açın.")
+        page.set_status("Referans silindi. Kamerayı açın.")
         page.enable_retake_button(False)
         page.enable_capture(False)
 
@@ -1234,7 +1235,7 @@ class ConfiguratorController:
 
             page.clear()
             page.set_status(
-                "Bu kanal için reference bulunamadı. Önce Reference "
+                "Bu kanal için referans bulunamadı. Önce Referans "
                 "sekmesinden fotoğraf çekin."
             )
             return
@@ -1246,7 +1247,7 @@ class ConfiguratorController:
         page.load_rois(rois)
 
         page.set_status(
-            f"{len(rois)} ROI yüklendi."
+            f"{len(rois)} göz yüklendi."
         )
 
     # -------------------------------------------------
@@ -1287,7 +1288,7 @@ class ConfiguratorController:
             )
 
         self.window.roi_page.set_status(
-            f"{len(rois)} ROI kaydedildi."
+            f"{len(rois)} göz kaydedildi."
         )
 
         channel_label = (
@@ -1308,7 +1309,7 @@ class ConfiguratorController:
 
             "Başarılı",
 
-            f"{len(rois)} ROI roi.json dosyasına kaydedildi."
+            f"{len(rois)} göz roi.json dosyasına kaydedildi."
 
         )
 
@@ -1326,7 +1327,7 @@ class ConfiguratorController:
             QMessageBox.warning(
                 self.window,
                 "Uyarı",
-                "Önce Reference sekmesinden fotoğraf çekin."
+                "Önce Referans sekmesinden fotoğraf çekin."
             )
 
             return
@@ -1340,7 +1341,7 @@ class ConfiguratorController:
             QMessageBox.information(
                 self.window,
                 "Sonuç Yok",
-                "Otomatik ROI bulunamadı. Kasa gözleri arasında "
+                "Otomatik göz bulunamadı. Kasa gözleri arasında "
                 "belirgin bir çizgi/duvar olması gerekiyor."
             )
 
@@ -1355,8 +1356,8 @@ class ConfiguratorController:
             answer = QMessageBox.question(
                 self.window,
                 "Emin misiniz?",
-                f"Mevcut {existing_count} ROI silinip otomatik "
-                f"bulunan {len(detected)} ROI ile değiştirilecek. "
+                f"Mevcut {existing_count} göz silinip otomatik "
+                f"bulunan {len(detected)} göz ile değiştirilecek. "
                 "Devam edilsin mi?"
             )
 
@@ -1371,7 +1372,7 @@ class ConfiguratorController:
         page.load_rois(rois)
 
         page.set_status(
-            f"{len(rois)} ROI otomatik bulundu. Kontrol edip "
+            f"{len(rois)} göz otomatik bulundu. Kontrol edip "
             "Kaydet'e basın."
         )
 
@@ -1602,8 +1603,8 @@ class ConfiguratorController:
 
                 "Uyarı",
 
-                "1, 2, 3 sabit köşe marker'ları için ayrılmıştır, "
-                "tanı ID'si olarak kullanılamaz."
+                "1, 2, 3 sabit köşe işaretleri için ayrılmıştır, "
+                "tanı kimliği olarak kullanılamaz."
 
             )
 
@@ -1624,7 +1625,7 @@ class ConfiguratorController:
 
                         "Uyarı",
 
-                        f"Marker ID {marker_id} zaten '{other.name}' "
+                        f"İşaret Kimliği {marker_id} zaten '{other.name}' "
                         "modelinde kullanılıyor."
 
                     )

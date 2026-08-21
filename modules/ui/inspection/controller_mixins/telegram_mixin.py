@@ -66,7 +66,7 @@ class TelegramMixin:
         )
 
         caption = (
-            f"⚠ NG - {band_name}\n"
+            f"⚠ HATA - {band_name}\n"
             f"Hatalı gözler: {', '.join(ng_names) if ng_names else '-'}"
         )
 
@@ -74,7 +74,7 @@ class TelegramMixin:
 
             caption += (
                 f"\n\nYanlış tespitse bu mesaja {settings.confirm_emoji} "
-                "ile tepki verin, otomatik olarak OK'e çevrilir."
+                "ile tepki verin, otomatik olarak UYGUN'a çevrilir."
             )
 
         # inspection_logger band değişse bile DOĞRU kayda yazsın diye

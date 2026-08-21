@@ -99,8 +99,8 @@ class PeriodicReportMixin:
 
             caption = (
                 f"📊 Günlük Özet - {band.name}\n"
-                f"Toplam: {stats['total']} | OK: {stats['ok_count']} | "
-                f"NG: {stats['ng_count']}"
+                f"Toplam: {stats['total']} | UYGUN: {stats['ok_count']} | "
+                f"HATA: {stats['ng_count']}"
             )
 
             for chat_id in chat_ids:

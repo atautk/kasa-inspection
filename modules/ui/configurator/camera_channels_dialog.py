@@ -40,7 +40,7 @@ class CameraChannelsDialog(QDialog):
         info_label = QLabel(
             "Aynı kasayı farklı açılardan izlemek için ek kamera "
             "kanalları tanımlayın. Her kanalın kendi referans "
-            "fotoğrafı ve ROI seti olur (Reference/ROI sekmelerinde "
+            "fotoğrafı ve göz seti olur (Referans/Gözler sekmelerinde "
             "kanal seçilerek düzenlenir)."
         )
         info_label.setWordWrap(True)
@@ -147,7 +147,7 @@ class CameraChannelsDialog(QDialog):
         answer = QMessageBox.question(
             self,
             "Emin misiniz?",
-            "Kamera kanalı silinecek (fotoğraf/ROI dosyaları diskte "
+            "Kamera kanalı silinecek (fotoğraf/göz dosyaları diskte "
             "kalır ama band artık onları kullanmaz). Devam edilsin mi?"
         )
 

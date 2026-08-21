@@ -59,7 +59,7 @@ class TelegramSettingsDialog(QDialog):
         layout.addLayout(chat_row)
 
         self.notify_ng_checkbox = QCheckBox(
-            "NG tespit edildiğinde bildir (fotoğrafla birlikte)"
+            "HATA tespit edildiğinde bildir (fotoğrafla birlikte)"
         )
         layout.addWidget(self.notify_ng_checkbox)
 
@@ -69,14 +69,14 @@ class TelegramSettingsDialog(QDialog):
         layout.addWidget(self.notify_disconnect_checkbox)
 
         self.react_to_confirm_checkbox = QCheckBox(
-            "NG mesajına emoji ile tepki verilince otomatik OK'e çevir "
-            "(inceleme sırasında Inspection açık olmalı)"
+            "HATA mesajına emoji ile tepki verilince otomatik UYGUN'a çevir "
+            "(bu sırada İnceleme uygulaması açık olmalı)"
         )
         layout.addWidget(self.react_to_confirm_checkbox)
 
         self.daily_report_checkbox = QCheckBox(
-            "Her 24 saatte bir özet rapor gönder (toplam/OK/NG, "
-            "model ve ROI bazlı dağılım - Excel dosyası olarak)"
+            "Her 24 saatte bir özet rapor gönder (toplam/UYGUN/HATA, "
+            "model ve göz bazlı dağılım - Excel dosyası olarak)"
         )
         layout.addWidget(self.daily_report_checkbox)
 
@@ -162,7 +162,7 @@ class TelegramSettingsDialog(QDialog):
             return
 
         success = notifier.send_message(
-            "Kasa Inspection: test mesajı. Bu mesajı görüyorsanız "
+            "Kasa İnceleme: test mesajı. Bu mesajı görüyorsanız "
             "Telegram bildirimleri doğru yapılandırılmış."
         )
 

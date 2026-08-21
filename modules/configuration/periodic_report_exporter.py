@@ -30,12 +30,12 @@ class PeriodicReportExporter:
         )
 
         sheet.append(["Toplam Kontrol", stats["total"]])
-        sheet.append(["OK", stats["ok_count"]])
-        sheet.append(["NG", stats["ng_count"]])
-        sheet.append(["NG Oranı (%)", round(ng_ratio, 2)])
+        sheet.append(["UYGUN", stats["ok_count"]])
+        sheet.append(["HATA", stats["ng_count"]])
+        sheet.append(["HATA Oranı (%)", round(ng_ratio, 2)])
 
         sheet.append([])
-        sheet.append(["Model", "OK", "NG"])
+        sheet.append(["Model", "UYGUN", "HATA"])
 
         for cell in sheet[sheet.max_row]:
             cell.font = Font(bold=True)
@@ -47,7 +47,7 @@ class PeriodicReportExporter:
             ])
 
         sheet.append([])
-        sheet.append(["ROI", "OK", "NG"])
+        sheet.append(["Göz", "UYGUN", "HATA"])
 
         for cell in sheet[sheet.max_row]:
             cell.font = Font(bold=True)

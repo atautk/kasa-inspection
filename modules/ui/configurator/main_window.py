@@ -23,7 +23,7 @@ class MainWindow(QMainWindow):
 
         super().__init__()
 
-        self.setWindowTitle("KASA CONFIGURATOR")
+        self.setWindowTitle("KASA KURULUM")
 
         restore_or_center(self, SETTINGS_KEY, 1400, 900)
 
@@ -36,9 +36,9 @@ class MainWindow(QMainWindow):
         self.test_runner_page = TestRunnerPage()
 
         self.tabs.addTab(self.band_page, "Band")
-        self.tabs.addTab(self.reference_page, "Reference")
-        self.tabs.addTab(self.roi_page, "ROI")
-        self.tabs.addTab(self.model_page, "Models")
+        self.tabs.addTab(self.reference_page, "Referans")
+        self.tabs.addTab(self.roi_page, "Gözler")
+        self.tabs.addTab(self.model_page, "Modeller")
 
         # Paketlenmiş .exe'de pytest/tests/ klasörü bulunmadığından bu
         # sekme çalışmaz - sadece geliştirme ortamında (python ile
